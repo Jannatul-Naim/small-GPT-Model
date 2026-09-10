@@ -255,8 +255,13 @@ Generated files are saved to:
 ```text
 /data/text/
 ```
+<Recommended:> use /data/text and give yourself permission
 
-
+Run:
+```
+sudo mkdir -p /data/text
+sudo chown -R <USERNAME>:<USERNAME> /data
+```
 ## License
 
 This project is created for **educational purposes**.
