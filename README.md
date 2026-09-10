@@ -242,6 +242,21 @@ python -m generation.generate \
   --top-k 40
 ```
 
+## Text Generation
+
+Generate large text datasets using Ollama's `gpt-oss:120b-cloud` model.
+
+```bash
+python generate_text.py "Machine Learning"
+```
+
+Generated files are saved to:
+
+```text
+/data/text/
+```
+
+
 ## License
 
 This project is created for **educational purposes**.
