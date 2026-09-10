@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -29,7 +30,42 @@ def fingerprint(path: Path) -> str:
     return h.hexdigest()
 
 
+def load_or_train_tokenizer(reuse: bool):
+    if reuse:
+        if not VOCAB.exists():
+            raise FileNotFoundError(
+                "--reuse-tokenizer was requested, but "
+                f"{VOCAB} does not exist. Prepare a fresh dataset first."
+            )
+        print(f"Loading existing tokenizer: {VOCAB}")
+        return BPETokenizer.load(VOCAB)
+
+    print("Training tokenizer...")
+    tokenizer = BPETokenizer()
+    tokenizer.train(
+        RAW.read_text(encoding="utf-8", errors="ignore"),
+        vocab_size=VOCAB_SIZE,
+        min_frequency=MIN_BPE_FREQUENCY,
+        verbose=True,
+    )
+    tokenizer.save(VOCAB)
+    return tokenizer
+
+
 def main():
+    parser = argparse.ArgumentParser(
+        description="Tokenize and prepare the Small-GPT corpus."
+    )
+    parser.add_argument(
+        "--reuse-tokenizer",
+        action="store_true",
+        help=(
+            "Reuse data/processed/vocab.json instead of retraining BPE. "
+            "Use this for continual-learning/update runs."
+        ),
+    )
+    args = parser.parse_args()
+
     OUT.mkdir(parents=True, exist_ok=True)
 
     if not RAW.exists():
@@ -38,33 +74,37 @@ def main():
         )
 
     print(f"Reading corpus: {RAW}")
-    text = RAW.read_text(encoding="utf-8", errors="ignore")
+    text = RAW.read_text(
+        encoding="utf-8",
+        errors="ignore",
+    )
 
     if len(text) < 10000:
         raise ValueError("Dataset is too small. Add more text.")
 
     print(f"Characters: {len(text):,}")
-    print("Training tokenizer...")
 
-    tokenizer = BPETokenizer()
-    tokenizer.train(
-        text,
-        vocab_size=VOCAB_SIZE,
-        min_frequency=MIN_BPE_FREQUENCY,
-        verbose=True,
+    tokenizer = load_or_train_tokenizer(
+        reuse=args.reuse_tokenizer
     )
 
     print("Encoding corpus...")
     encoded = tokenizer.encode(text)
-    ids = torch.tensor(encoded, dtype=torch.int32)
+
+    if tokenizer.vocab_size > 65535:
+        raise ValueError(
+            "Vocabulary is larger than uint16 can represent. "
+            "Reduce VOCAB_SIZE before preparing the dataset."
+        )
+
+    # uint16 cuts processed token RAM/disk usage in half versus int32.
+    # Training converts only sampled batches to int64 on the target device.
+    ids = torch.tensor(encoded, dtype=torch.uint16)
 
     split = int(len(ids) * TRAIN_RATIO)
     if split <= 0 or split >= len(ids):
         raise ValueError("Invalid train/validation split.")
 
-    # int32 halves dataset RAM/disk compared with int64 while remaining large
-    # enough for a 32k-token vocabulary. Training converts batches to int64 on
-    # the selected device when needed by nn.Embedding.
     torch.save(
         {
             "train": ids[:split].contiguous(),
@@ -73,8 +113,6 @@ def main():
         DATASET,
         _use_new_zipfile_serialization=True,
     )
-
-    tokenizer.save(VOCAB)
 
     META.write_text(
         json.dumps(
@@ -86,11 +124,13 @@ def main():
                 "validation_tokens": len(ids) - split,
                 "train_ratio": TRAIN_RATIO,
                 "bpe_min_frequency": MIN_BPE_FREQUENCY,
+                "token_dtype": "uint16",
                 "corpus_sha256": fingerprint(RAW),
+                "tokenizer_sha256": fingerprint(VOCAB),
+                "reused_tokenizer": args.reuse_tokenizer,
             },
             indent=2,
-        )
-        + "\n",
+        ) + "\n",
         encoding="utf-8",
     )
 
@@ -99,6 +139,7 @@ def main():
     print(f"Tokens: {len(ids):,}")
     print(f"Train tokens: {split:,}")
     print(f"Validation tokens: {len(ids) - split:,}")
+    print("Token dtype: uint16")
     print(f"Saved dataset: {DATASET}")
     print(f"Saved tokenizer: {VOCAB}")
 
