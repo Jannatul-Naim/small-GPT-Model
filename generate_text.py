@@ -4,21 +4,14 @@ import sys
 import ollama
 
 
-# ============================================================
-# CONFIG
-# ============================================================
 
 MODEL = "gpt-oss:120b-cloud"
-OUTPUT_DIR = "/data/text"
+OUTPUT_DIR = "data/text"
 
-# Number of tokens requested from Ollama.
-# Increase this if you want larger documents.
+
 NUM_PREDICT = 20000
 
 
-# ============================================================
-# FUNCTIONS
-# ============================================================
 
 def safe_filename(topic):
     """Convert topic into a safe filename."""
@@ -74,10 +67,6 @@ Generate as much useful content as possible.
 
     return response["response"]
 
-
-# ============================================================
-# MAIN
-# ============================================================
 
 def main():
     if len(sys.argv) < 2:
