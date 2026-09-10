@@ -17,9 +17,10 @@ VOCAB = OUT / "vocab.json"
 DATASET = OUT / "dataset.pt"
 META = OUT / "meta.json"
 
-VOCAB_SIZE = 32000
+VOCAB_SIZE = 8192
 TRAIN_RATIO = 0.9
-MIN_BPE_FREQUENCY = 2
+MIN_BPE_FREQUENCY = 3
+
 
 
 def fingerprint(path: Path) -> str:
