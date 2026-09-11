@@ -3,55 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MyGPT</title>
+<title>Small-GPT Domain Expert</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
-
 <body>
 <main>
-<h1>MyGPT</h1>
-<p>GPT-style language model built from scratch.</p>
-
+<h1>Small-GPT Domain Expert</h1>
+<p>Continual learning + retrieval for a local RTX 3060 model.</p>
 <section id="chat"></section>
-
 <form id="form">
-<textarea
-    id="prompt"
-    rows="4"
-    placeholder="Write a prompt..."
-    required></textarea>
-
+<textarea id="prompt" rows="5" placeholder="Ask about the material you trained..." required></textarea>
 <div class="controls">
-
-<label>
-Temperature
-<input
-    id="temperature"
-    type="number"
-    value="0.8"
-    min="0.1"
-    max="2"
-    step="0.1">
-</label>
-
-<label>
-Max tokens
-<input
-    id="maxTokens"
-    type="number"
-    value="200"
-    min="1"
-    max="2000">
-</label>
-
-<button type="submit">
-Generate
-</button>
-
+<label>Temperature <input id="temperature" type="number" value="0.75" min="0.1" max="2" step="0.05"></label>
+<label>Max tokens <input id="maxTokens" type="number" value="180" min="1" max="512"></label>
+<label><input id="rag" type="checkbox" checked> Use live retrieval</label>
+<button type="submit">Ask</button>
 </div>
 </form>
 </main>
-
 <script src="/static/app.js"></script>
 </body>
 </html>
