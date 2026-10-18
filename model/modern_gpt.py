@@ -719,6 +719,8 @@ class ModernGPT(nn.Module):
         max_new_tokens: int,
         temperature: float = 0.8,
         top_k: int = 40,
+        top_p: float = 1.0,
+        repetition_penalty: float = 1.0,
     ) -> torch.Tensor:
         """Generate new tokens autoregressively.
 
@@ -768,49 +770,45 @@ class ModernGPT(nn.Module):
                 :
             ]
 
-            # Temperature scaling controls the sharpness of the probability
-            # distribution. The minimum prevents division by zero.
-            logits /= max(
-                temperature,
-                1e-5,
-            )
+            # Penalize tokens already present in the current context.
+            if repetition_penalty != 1.0:
+                seen = torch.unique(idx_cond)
+                for token_id in seen.tolist():
+                    value = logits[:, token_id]
+                    logits[:, token_id] = torch.where(
+                        value < 0,
+                        value * repetition_penalty,
+                        value / repetition_penalty,
+                    )
+
+            logits /= max(temperature, 1e-5)
 
             if top_k:
-                # Restrict sampling to the K highest-probability candidates.
-                k = min(
-                    top_k,
-                    logits.size(-1),
-                )
-
-                values, _ = torch.topk(
-                    logits,
-                    k,
-                )
-
-                # The final value in each row is the score threshold for
-                # the Kth-highest candidate.
-                threshold = values[
-                    :,
-                    [-1],
-                ]
-
-                # Remove all candidates outside the top-k set by assigning
-                # them negative infinity. They therefore receive zero
-                # probability after softmax.
+                k = min(top_k, logits.size(-1))
+                values, _ = torch.topk(logits, k)
+                threshold = values[:, [-1]]
                 logits = torch.where(
                     logits < threshold,
-                    torch.full_like(
-                        logits,
-                        float("-inf"),
-                    ),
+                    torch.full_like(logits, float("-inf")),
                     logits,
                 )
 
-            # Convert filtered logits into a probability distribution.
-            probs = F.softmax(
-                logits,
-                dim=-1,
-            )
+            # Nucleus sampling: keep the smallest set whose cumulative
+            # probability is at least top_p.
+            if 0.0 < top_p < 1.0:
+                sorted_logits, sorted_indices = torch.sort(
+                    logits, descending=True, dim=-1
+                )
+                sorted_probs = F.softmax(sorted_logits, dim=-1)
+                cumulative = torch.cumsum(sorted_probs, dim=-1)
+                remove = cumulative > top_p
+                remove[:, 1:] = remove[:, :-1].clone()
+                remove[:, 0] = False
+                sorted_logits = sorted_logits.masked_fill(remove, float("-inf"))
+                logits = torch.full_like(logits, float("-inf"))
+                logits.scatter_(1, sorted_indices, sorted_logits)
+
+            probs = F.softmax(logits, dim=-1)
 
             # Sample one token from the resulting probability distribution.
             next_token = torch.multinomial(

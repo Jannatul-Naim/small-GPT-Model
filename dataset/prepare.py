@@ -1,149 +1,59 @@
+"""Prepare uint16 token binaries without loading the whole dataset into RAM."""
 from __future__ import annotations
-
-import argparse
-import hashlib
-import json
+import argparse, hashlib, json
 from pathlib import Path
-
-import torch
-
+from array import array
 from tokenizer.bpe import BPETokenizer
 
+ROOT=Path(__file__).resolve().parents[1]
+RAW=ROOT/'data/raw/sources.jsonl'; NEW=ROOT/'data/raw/new_sources.json'
+OUT=ROOT/'data/processed'; VOCAB=OUT/'vocab.json'; META=OUT/'meta.json'
+VOCAB_SIZE=16384; VAL_MOD=20
 
-ROOT = Path(__file__).resolve().parents[1]
-RAW = ROOT / "data/raw/corpus.txt"
-OUT = ROOT / "data/processed"
-VOCAB = OUT / "vocab.json"
-DATASET = OUT / "dataset.pt"
-META = OUT / "meta.json"
-
-VOCAB_SIZE = 8192
-TRAIN_RATIO = 0.9
-MIN_BPE_FREQUENCY = 3
-
-
-
-def fingerprint(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(block)
-    return h.hexdigest()
-
-
-def load_or_train_tokenizer(reuse: bool):
-    if reuse:
-        if not VOCAB.exists():
-            raise FileNotFoundError(
-                "--reuse-tokenizer was requested, but "
-                f"{VOCAB} does not exist. Prepare a fresh dataset first."
-            )
-        print(f"Loading existing tokenizer: {VOCAB}")
-        return BPETokenizer.load(VOCAB)
-
-    print("Training tokenizer...")
-    tokenizer = BPETokenizer()
-    tokenizer.train(
-        RAW.read_text(encoding="utf-8", errors="ignore"),
-        vocab_size=VOCAB_SIZE,
-        min_frequency=MIN_BPE_FREQUENCY,
-        verbose=True,
-    )
-    tokenizer.save(VOCAB)
-    return tokenizer
-
+def write_bin(path, token_lists):
+    with path.open('wb') as f:
+        for ids in token_lists:
+            a=array('H', ids); a.tofile(f)
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Tokenize and prepare the Small-GPT corpus."
-    )
-    parser.add_argument(
-        "--reuse-tokenizer",
-        action="store_true",
-        help=(
-            "Reuse data/processed/vocab.json instead of retraining BPE. "
-            "Use this for continual-learning/update runs."
-        ),
-    )
-    args = parser.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument('--reuse-tokenizer',action='store_true'); args=ap.parse_args()
+    OUT.mkdir(parents=True,exist_ok=True)
+    if not RAW.exists(): raise FileNotFoundError('Run python -m dataset.collect')
+    rows=[json.loads(x) for x in RAW.read_text(encoding='utf-8',errors='ignore').splitlines() if x.strip()]
+    if not rows: raise ValueError('No sources collected.')
+    if args.reuse_tokenizer:
+        if not VOCAB.exists(): raise FileNotFoundError('No tokenizer. Run prepare without --reuse-tokenizer first.')
+        tok=BPETokenizer.load(VOCAB); print('Reusing tokenizer:', tok.vocab_size)
+    else:
+        corpus='\n\n'.join(r['text'] for r in rows)
+        if len(corpus)<100_000: print('WARNING: corpus is below 100k characters; add more material for meaningful pretraining.')
+        tok=BPETokenizer(); tok.train(corpus,vocab_size=VOCAB_SIZE,min_frequency=2,verbose=True); tok.save(VOCAB)
+    if tok.vocab_size>VOCAB_SIZE: raise ValueError(f'Tokenizer overflow: {tok.vocab_size} > {VOCAB_SIZE}')
 
-    OUT.mkdir(parents=True, exist_ok=True)
+    new=set(json.loads(NEW.read_text())) if NEW.exists() else set()
+    train=[]; val=[]; new_tokens=[]; old_tokens=[]
+    total=0
+    for r in rows:
+        ids=tok.encode(r['text'])
+        if len(ids)<769: continue
+        # deterministic source-level validation split: prevents text-fragment leakage.
+        h=int(hashlib.sha256(r['id'].encode()).hexdigest()[:8],16)
+        target=val if h%VAL_MOD==0 else train
+        target.append(ids)
+        total+=len(ids)
+        if r['id'] in new: new_tokens.append(ids)
+        else: old_tokens.append(ids)
+    if not train or not val: raise ValueError('Need more distinct sources to create train/validation splits.')
+    write_bin(OUT/'train.bin',train); write_bin(OUT/'val.bin',val)
+    write_bin(OUT/'new.bin',new_tokens if new_tokens else old_tokens[:1])
+    write_bin(OUT/'replay.bin',old_tokens if old_tokens else train[:1])
+    def sha(p):
+        h=hashlib.sha256();
+        with p.open('rb') as f:
+            for b in iter(lambda:f.read(1<<20),b''): h.update(b)
+        return h.hexdigest()
+    meta={'vocab_size':tok.vocab_size,'sources':len(rows),'new_sources':len(new),'train_tokens':sum(len(x) for x in train),'val_tokens':sum(len(x) for x in val),'new_tokens':sum(len(x) for x in new_tokens),'replay_tokens':sum(len(x) for x in old_tokens),'tokenizer_sha256':sha(VOCAB)}
+    META.write_text(json.dumps(meta,indent=2),encoding='utf-8')
+    print(json.dumps(meta,indent=2))
 
-    if not RAW.exists():
-        raise FileNotFoundError(
-            "Run python -m dataset.collect first."
-        )
-
-    print(f"Reading corpus: {RAW}")
-    text = RAW.read_text(
-        encoding="utf-8",
-        errors="ignore",
-    )
-
-    if len(text) < 10000:
-        raise ValueError("Dataset is too small. Add more text.")
-
-    print(f"Characters: {len(text):,}")
-
-    tokenizer = load_or_train_tokenizer(
-        reuse=args.reuse_tokenizer
-    )
-
-    print("Encoding corpus...")
-    encoded = tokenizer.encode(text)
-
-    if tokenizer.vocab_size > 65535:
-        raise ValueError(
-            "Vocabulary is larger than uint16 can represent. "
-            "Reduce VOCAB_SIZE before preparing the dataset."
-        )
-
-    # uint16 cuts processed token RAM/disk usage in half versus int32.
-    # Training converts only sampled batches to int64 on the target device.
-    ids = torch.tensor(encoded, dtype=torch.uint16)
-
-    split = int(len(ids) * TRAIN_RATIO)
-    if split <= 0 or split >= len(ids):
-        raise ValueError("Invalid train/validation split.")
-
-    torch.save(
-        {
-            "train": ids[:split].contiguous(),
-            "val": ids[split:].contiguous(),
-        },
-        DATASET,
-        _use_new_zipfile_serialization=True,
-    )
-
-    META.write_text(
-        json.dumps(
-            {
-                "vocab_size": tokenizer.vocab_size,
-                "merges": len(tokenizer.merges),
-                "tokens": len(ids),
-                "train_tokens": split,
-                "validation_tokens": len(ids) - split,
-                "train_ratio": TRAIN_RATIO,
-                "bpe_min_frequency": MIN_BPE_FREQUENCY,
-                "token_dtype": "uint16",
-                "corpus_sha256": fingerprint(RAW),
-                "tokenizer_sha256": fingerprint(VOCAB),
-                "reused_tokenizer": args.reuse_tokenizer,
-            },
-            indent=2,
-        ) + "\n",
-        encoding="utf-8",
-    )
-
-    print(f"Vocabulary: {tokenizer.vocab_size:,}")
-    print(f"BPE merges: {len(tokenizer.merges):,}")
-    print(f"Tokens: {len(ids):,}")
-    print(f"Train tokens: {split:,}")
-    print(f"Validation tokens: {len(ids) - split:,}")
-    print("Token dtype: uint16")
-    print(f"Saved dataset: {DATASET}")
-    print(f"Saved tokenizer: {VOCAB}")
-
-
-if __name__ == "__main__":
-    main()
+if __name__=='__main__': main()

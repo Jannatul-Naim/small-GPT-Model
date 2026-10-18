@@ -1,389 +1,103 @@
+"""Research training engine: pretraining, resume, and continual replay updates."""
 from __future__ import annotations
-
-import argparse
-import hashlib
-import os
-import tempfile
+import argparse, hashlib, math, os, random, tempfile
 from pathlib import Path
-
+import numpy as np
 import torch
-
 from model.modern_gpt import ModernGPT
 from tokenizer.bpe import BPETokenizer
 from training import config
+ROOT=Path(__file__).resolve().parents[1]; DATA=ROOT/'data/processed'; CKPT=ROOT/config.checkpoint_path; BEST=ROOT/config.best_checkpoint_path
 
+def sha(p):
+ h=hashlib.sha256();
+ with p.open('rb') as f:
+  for b in iter(lambda:f.read(1<<20),b''): h.update(b)
+ return h.hexdigest()
 
-ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "data/processed/dataset.pt"
-TOKENIZER = ROOT / "data/processed/vocab.json"
-TOKENIZER_META = ROOT / "data/processed/meta.json"
-CHECKPOINT = ROOT / config.checkpoint_path
-BEST_CHECKPOINT = ROOT / config.best_checkpoint_path
+def load_bin(name):
+ p=DATA/name
+ if not p.exists(): raise FileNotFoundError(p)
+ return np.memmap(p,dtype=np.uint16,mode='r')
 
+def batch(data, block, bs, device, generator=None):
+ if len(data)<=block+1: raise ValueError(f'Dataset {len(data)} tokens is too small for block {block}.')
+ starts=torch.randint(0,len(data)-block-1,(bs,),generator=generator).tolist()
+ x=torch.stack([torch.from_numpy(np.asarray(data[i:i+block],dtype=np.int64)) for i in starts])
+ y=torch.stack([torch.from_numpy(np.asarray(data[i+1:i+block+1],dtype=np.int64)) for i in starts])
+ return x.to(device),y.to(device)
 
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def get_batch(data, block_size: int, batch_size: int, device: str):
-    max_start = len(data) - block_size - 1
-    if max_start <= 0:
-        raise ValueError("Dataset is smaller than the context window.")
-
-    starts = torch.randint(0, max_start + 1, (batch_size,))
-
-    x = torch.stack(
-        [data[i:i + block_size] for i in starts]
-    )
-    y = torch.stack(
-        [data[i + 1:i + block_size + 1] for i in starts]
-    )
-
-    # The processed dataset uses uint16 to reduce host RAM and disk usage.
-    # nn.Embedding requires integer token indices, so conversion happens here.
-    x = x.to(device=device, dtype=torch.long, non_blocking=(device == "cuda"))
-    y = y.to(device=device, dtype=torch.long, non_blocking=(device == "cuda"))
-    return x, y
-
-
-def autocast_context(device: str):
-    return torch.autocast(
-        device_type="cuda",
-        dtype=torch.float16,
-        enabled=(device == "cuda"),
-    )
-
-
+def amp(device): return torch.autocast('cuda',dtype=torch.float16,enabled=device=='cuda')
 @torch.no_grad()
-def evaluate(model, train_data, val_data, cfg, device):
-    model.eval()
-    results = {}
+def evaluate(model,data,cfg,device):
+ # Reuse the same validation windows at every checkpoint. This makes loss
+ # comparisons meaningful instead of adding fresh sampling noise each time.
+ model.eval(); vals=[]; generator=torch.Generator().manual_seed(config.seed+10_000)
+ for _ in range(config.eval_iters):
+  x,y=batch(data,cfg['block_size'],config.batch_size,device,generator)
+  with amp(device): _,loss=model(x,y)
+  vals.append(float(loss))
+ model.train(); return sum(vals)/len(vals)
 
-    for name, data in (("train", train_data), ("val", val_data)):
-        losses = []
+def atomic(payload,path):
+ path.parent.mkdir(parents=True,exist_ok=True); fd,tmp=tempfile.mkstemp(prefix='._ckpt_',dir=path.parent)
+ try:
+  with os.fdopen(fd,'wb') as f: torch.save(payload,f); f.flush(); os.fsync(f.fileno())
+  os.replace(tmp,path)
+ except Exception:
+  Path(tmp).unlink(missing_ok=True); raise
 
-        for _ in range(config.eval_iters):
-            x, y = get_batch(
-                data,
-                cfg["block_size"],
-                config.batch_size,
-                device,
-            )
+def lr(step,total,peak):
+ if step<config.warmup_steps: return peak*max(1,step+1)/config.warmup_steps
+ p=min(1.0,(step-config.warmup_steps)/max(1,total-config.warmup_steps)); c=.5*(1+math.cos(math.pi*p)); return peak*(config.min_lr_ratio+(1-config.min_lr_ratio)*c)
 
-            with autocast_context(device):
-                _, loss = model(x, y)
+def payload(model,opt,step,best,cfg,tokhash):
+ state={'python':random.getstate(),'numpy':np.random.get_state(),'torch':torch.get_rng_state()}
+ if torch.cuda.is_available(): state['cuda']=torch.cuda.get_rng_state_all()
+ return {'model_state':model.state_dict(),'optimizer_state':opt.state_dict(),'step':step,'best_val':best,'config':cfg,'tokenizer_sha256':tokhash,'rng_state':state,'version':3}
 
-            losses.append(float(loss.item()))
-
-        results[name] = sum(losses) / len(losses)
-
-    model.train()
-    return results
-
-
-def build_model(cfg, device):
-    model = ModernGPT(**cfg).to(device)
-    model.gradient_checkpointing = bool(config.gradient_checkpointing)
-    return model
-
-
-def atomic_torch_save(payload, path: Path):
-    """Write a checkpoint safely on the same filesystem, then replace."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    fd, temp_name = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=path.parent,
-    )
-    temp_path = Path(temp_name)
-
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            torch.save(
-                payload,
-                handle,
-                _use_new_zipfile_serialization=True,
-            )
-            handle.flush()
-            os.fsync(handle.fileno())
-
-        os.replace(temp_path, path)
-
-        # Best-effort directory sync for crash resilience on Linux filesystems.
-        try:
-            dir_fd = os.open(path.parent, os.O_DIRECTORY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
-        except OSError:
-            pass
-
-    except Exception:
-        try:
-            temp_path.unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise
-
-
-def checkpoint_payload(model, optimizer, step, best_val, cfg, tokenizer_hash):
-    return {
-        "model_state": model.state_dict(),
-        "optimizer_state": optimizer.state_dict(),
-        "step": int(step),
-        "best_val": float(best_val),
-        "config": dict(cfg),
-        "model_size": config.MODEL_SIZE,
-        "tokenizer_vocab_size": int(cfg["vocab_size"]),
-        "tokenizer_sha256": tokenizer_hash,
-    }
-
-
-def validate_checkpoint_tokenizer(checkpoint, tokenizer):
-    saved_vocab = checkpoint.get("tokenizer_vocab_size")
-    if saved_vocab != tokenizer.vocab_size:
-        raise ValueError(
-            "Tokenizer vocabulary is incompatible with the checkpoint. "
-            f"checkpoint={saved_vocab}, current={tokenizer.vocab_size}. "
-            "For resume/update, keep the tokenizer fixed."
-        )
-
-    saved_hash = checkpoint.get("tokenizer_sha256")
-    current_hash = file_sha256(TOKENIZER)
-
-    # Old checkpoints may not contain the fingerprint. They remain loadable,
-    # but new checkpoints always record it.
-    if saved_hash and saved_hash != current_hash:
-        raise ValueError(
-            "Tokenizer file changed since the checkpoint was created. "
-            "Resume/update requires the same tokenizer."
-        )
-
-    return current_hash
-
+def restore_rng(state):
+ if not state: return
+ random.setstate(state['python']); np.random.set_state(state['numpy']); torch.set_rng_state(state['torch'])
+ if torch.cuda.is_available() and 'cuda' in state: torch.cuda.set_rng_state_all(state['cuda'])
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Train Small-GPT on a single RTX 3060 or CPU."
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["new", "resume", "update"],
-        default="new",
-        help=(
-            "new = fresh model; resume = continue optimizer/step; "
-            "update = continue model weights with a fresh optimizer and step counter"
-        ),
-    )
-    args = parser.parse_args()
+ ap=argparse.ArgumentParser(); ap.add_argument('--mode',choices=['new','resume','update'],default='new'); ap.add_argument('--steps',type=int); args=ap.parse_args()
+ torch.manual_seed(config.seed); np.random.seed(config.seed)
+ device='cuda' if torch.cuda.is_available() else 'cpu'; print('Device:',device)
+ if device=='cuda':
+  print('GPU:',torch.cuda.get_device_name(0)); print(f'VRAM: {torch.cuda.get_device_properties(0).total_memory/1024**3:.2f} GiB'); torch.backends.cuda.matmul.allow_tf32=True; torch.backends.cudnn.allow_tf32=True
+ if not (DATA/'train.bin').exists() or not (DATA/'val.bin').exists() or not (DATA/'vocab.json').exists(): raise FileNotFoundError('Prepare data first.')
+ tok=BPETokenizer.load(DATA/'vocab.json'); tokhash=sha(DATA/'vocab.json'); val=load_bin('val.bin')
+ cfg=dict(config.CONFIGS[config.MODEL_SIZE]); cfg['vocab_size']=tok.vocab_size
+ if args.mode=='new':
+  train=load_bin('train.bin'); model=ModernGPT(**cfg).to(device); opt=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,betas=config.betas,weight_decay=config.weight_decay); start=0; best=float('inf'); peak=config.learning_rate
+ elif args.mode=='resume':
+  train=load_bin('train.bin'); ck=torch.load(CKPT,map_location=device,weights_only=False)
+  if ck.get('tokenizer_sha256') != tokhash: raise ValueError('Checkpoint tokenizer hash does not match data/processed/vocab.json. Restore the matching tokenizer or start a new run.')
+  cfg=dict(ck['config']); model=ModernGPT(**cfg).to(device); model.load_state_dict(ck['model_state']); opt=torch.optim.AdamW(model.parameters(),lr=config.learning_rate,betas=config.betas,weight_decay=config.weight_decay); opt.load_state_dict(ck['optimizer_state']); start=int(ck['step'])+1; best=float(ck.get('best_val',float('inf'))); peak=config.learning_rate; restore_rng(ck.get('rng_state')); print('Resuming:',start)
+ else:
+  ck=torch.load(CKPT,map_location=device,weights_only=False)
+  if ck.get('tokenizer_sha256') != tokhash: raise ValueError('Checkpoint tokenizer hash does not match data/processed/vocab.json. Continual updates must reuse the original tokenizer.')
+  cfg=dict(ck['config']); model=ModernGPT(**cfg).to(device); model.load_state_dict(ck['model_state']); new=load_bin('new.bin'); replay=load_bin('replay.bin'); opt=torch.optim.AdamW(model.parameters(),lr=config.update_learning_rate,betas=config.betas,weight_decay=config.weight_decay); start=0; best=float('inf'); peak=config.update_learning_rate; train=None; print(f'Continual update: new={len(new):,} replay={len(replay):,} tokens; replay ratio={config.replay_ratio}')
+ model.gradient_checkpointing=config.gradient_checkpointing; print(f"Parameters: {sum(p.numel() for p in model.parameters()):,}"); print('Context:',cfg['block_size'],'| effective tokens/step:',config.batch_size*config.gradient_accumulation_steps*cfg['block_size'])
+ steps=args.steps or config.max_steps; scaler=torch.amp.GradScaler('cuda',enabled=device=='cuda'); opt.zero_grad(set_to_none=True)
+ for step in range(start,start+steps):
+  current_lr=lr(step-start,steps,peak)
+  for g in opt.param_groups:g['lr']=current_lr
+  for micro in range(config.gradient_accumulation_steps):
+   if args.mode=='update':
+    # independent batches approximate token-level replay ratio.
+    use_replay=(torch.rand(())<config.replay_ratio).item(); source=replay if use_replay else new
+   else: source=train
+   x,y=batch(source,cfg['block_size'],config.batch_size,device)
+   with amp(device): _,loss=model(x,y); loss=loss/config.gradient_accumulation_steps
+   scaler.scale(loss).backward()
+  scaler.unscale_(opt); torch.nn.utils.clip_grad_norm_(model.parameters(),config.grad_clip); scaler.step(opt); scaler.update(); opt.zero_grad(set_to_none=True)
+  if (step+1)%config.eval_interval==0 or step==start+steps-1:
+   v=evaluate(model,val,cfg,device); print(f'step {step:6d} | val {v:.4f} | lr {current_lr:.2e}')
+   if v<best: best=v; atomic(payload(model,opt,step,best,cfg,tokhash),BEST); print('best checkpoint saved')
+   atomic(payload(model,opt,step,best,cfg,tokhash),CKPT)
+ final=start+steps-1; atomic(payload(model,opt,final,best,cfg,tokhash),CKPT); print('Training complete:',CKPT)
 
-    torch.manual_seed(config.seed)
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print("Device:", device)
-
-    if device == "cuda":
-        torch.cuda.empty_cache()
-        print("GPU:", torch.cuda.get_device_name(0))
-        props = torch.cuda.get_device_properties(0)
-        print(f"GPU VRAM: {props.total_memory / 1024**3:.2f} GiB")
-
-    if not DATASET.exists() or not TOKENIZER.exists():
-        raise FileNotFoundError(
-            "Prepare the dataset first:\n"
-            "python -m dataset.collect\n"
-            "python -m dataset.prepare"
-        )
-
-    package = torch.load(
-        DATASET,
-        map_location="cpu",
-        weights_only=False,
-    )
-    train_data = package["train"]
-    val_data = package["val"]
-
-    tokenizer = BPETokenizer.load(TOKENIZER)
-    tokenizer_hash = file_sha256(TOKENIZER)
-
-    cfg = dict(config.CONFIGS[config.MODEL_SIZE])
-
-    if args.mode == "new":
-        cfg["vocab_size"] = tokenizer.vocab_size
-        model = build_model(cfg, device)
-        optimizer = torch.optim.AdamW(
-            model.parameters(),
-            lr=config.learning_rate,
-            weight_decay=config.weight_decay,
-        )
-        start_step = 0
-        best_val = float("inf")
-
-    else:
-        if not CHECKPOINT.exists():
-            raise FileNotFoundError(
-                "No checkpoint found. Run --mode new first."
-            )
-
-        checkpoint = torch.load(
-            CHECKPOINT,
-            map_location=device,
-            weights_only=False,
-        )
-
-        validate_checkpoint_tokenizer(checkpoint, tokenizer)
-        cfg = dict(checkpoint["config"])
-
-        if args.mode == "resume":
-            model = build_model(cfg, device)
-            model.load_state_dict(checkpoint["model_state"])
-
-            optimizer = torch.optim.AdamW(
-                model.parameters(),
-                lr=config.learning_rate,
-                weight_decay=config.weight_decay,
-            )
-            optimizer.load_state_dict(checkpoint["optimizer_state"])
-            start_step = int(checkpoint["step"]) + 1
-            best_val = float(
-                checkpoint.get("best_val", float("inf"))
-            )
-
-        else:  # update
-            # Preserve learned weights, but start a clean optimizer because the
-            # dataset has changed. This is an explicit continual-training mode.
-            model = build_model(cfg, device)
-            model.load_state_dict(checkpoint["model_state"])
-
-            optimizer = torch.optim.AdamW(
-                model.parameters(),
-                lr=config.learning_rate * 0.5,
-                weight_decay=config.weight_decay,
-            )
-            start_step = 0
-            best_val = float(
-                checkpoint.get("best_val", float("inf"))
-            )
-            print(
-                "Update mode: model weights restored; "
-                "optimizer and step counter reset."
-            )
-
-    parameters = sum(p.numel() for p in model.parameters())
-    print(f"Parameters: {parameters:,} ({parameters / 1e6:.2f}M)")
-    print(
-        f"Batch: {config.batch_size} | "
-        f"Accumulation: {config.gradient_accumulation_steps} | "
-        f"Context: {cfg['block_size']}"
-    )
-    print(
-        f"Effective tokens/optimizer step: "
-        f"{config.batch_size * config.gradient_accumulation_steps * cfg['block_size']:,}"
-    )
-    print(
-        "Gradient checkpointing:",
-        "ON" if config.gradient_checkpointing else "OFF",
-    )
-
-    scaler = torch.amp.GradScaler(
-        "cuda",
-        enabled=(device == "cuda"),
-    )
-
-    optimizer.zero_grad(set_to_none=True)
-
-    end_step = start_step + config.max_steps
-
-    for step in range(start_step, end_step):
-        if step % config.eval_interval == 0:
-            losses = evaluate(
-                model,
-                train_data,
-                val_data,
-                cfg,
-                device,
-            )
-
-            print(
-                f"step {step:6d} | "
-                f"train {losses['train']:.4f} | "
-                f"val {losses['val']:.4f}"
-            )
-
-            payload = checkpoint_payload(
-                model,
-                optimizer,
-                step,
-                best_val,
-                cfg,
-                tokenizer_hash,
-            )
-
-            # Always keep a valid latest checkpoint for resume.
-            atomic_torch_save(payload, CHECKPOINT)
-            print("latest checkpoint saved")
-
-            if losses["val"] < best_val:
-                best_val = losses["val"]
-                payload = checkpoint_payload(
-                    model,
-                    optimizer,
-                    step,
-                    best_val,
-                    cfg,
-                    tokenizer_hash,
-                )
-                atomic_torch_save(payload, BEST_CHECKPOINT)
-                print("best checkpoint saved")
-
-        for _ in range(config.gradient_accumulation_steps):
-            x, y = get_batch(
-                train_data,
-                cfg["block_size"],
-                config.batch_size,
-                device,
-            )
-
-            with autocast_context(device):
-                _, loss = model(x, y)
-                loss = loss / config.gradient_accumulation_steps
-
-            scaler.scale(loss).backward()
-
-        scaler.unscale_(optimizer)
-
-        torch.nn.utils.clip_grad_norm_(
-            model.parameters(),
-            config.grad_clip,
-        )
-
-        scaler.step(optimizer)
-        scaler.update()
-        optimizer.zero_grad(set_to_none=True)
-
-    # Save the final state even when the last step is not an evaluation step.
-    final_step = end_step - 1
-    atomic_torch_save(
-        checkpoint_payload(
-            model,
-            optimizer,
-            final_step,
-            best_val,
-            cfg,
-            tokenizer_hash,
-        ),
-        CHECKPOINT,
-    )
-
-    print("Training complete.")
-    print(f"Latest checkpoint: {CHECKPOINT}")
-
-
-if __name__ == "__main__":
-    main()
+if __name__=='__main__': main()

@@ -1,31 +1,32 @@
-import os
+"""Generate a synthetic educational text with an Ollama model.
+
+Generated files are written to data/text/ and deliberately kept out of the
+primary data/ingest/ corpus until a person has reviewed them.
+"""
+from __future__ import annotations
+
+import argparse
+import json
 import re
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
 import ollama
 
-
-
+ROOT = Path(__file__).resolve().parent
 MODEL = "gpt-oss:120b-cloud"
-OUTPUT_DIR = "data/text"
+OUTPUT_DIR = ROOT / "data" / "text"/ "ollama"
+NUM_PREDICT = 20_000
 
 
-NUM_PREDICT = 20000
+def safe_filename(topic: str) -> str:
+    """Convert a topic into a portable filename stem."""
+    filename = re.sub(r"[^a-z0-9]+", "_", topic.lower().strip()).strip("_")
+    return filename or "generated_text"
 
 
-
-def safe_filename(topic):
-    """Convert topic into a safe filename."""
-    filename = topic.lower().strip()
-    filename = re.sub(r"[^a-z0-9]+", "_", filename)
-    filename = filename.strip("_")
-
-    if not filename:
-        filename = "generated_text"
-
-    return filename + ".txt"
-
-
-def generate_text(topic):
+def generate_text(topic: str, model: str, num_predict: int) -> str:
     prompt = f"""
 Write a very large, detailed, high-quality educational text about:
 
@@ -53,51 +54,67 @@ Requirements:
 Generate as much useful content as possible.
 """
 
-    print(f"Generating text using {MODEL}...")
-    print(f"Topic: {topic}")
-    print()
-
+    print(f"Generating synthetic text using {model}...")
+    print(f"Topic: {topic}\n")
     response = ollama.generate(
-        model=MODEL,
+        model=model,
         prompt=prompt,
-        options={
-            "num_predict": NUM_PREDICT,
-        }
+        options={"num_predict": num_predict},
     )
+    text = response["response"].strip()
+    if not text:
+        raise RuntimeError("The model returned an empty response.")
+    return text
 
-    return response["response"]
+
+def available_path(topic: str) -> Path:
+    """Choose a fresh output path so a previous generation is preserved."""
+    stem = safe_filename(topic)
+    candidate = OUTPUT_DIR / f"{stem}.txt"
+    version = 2
+    while candidate.exists() or candidate.with_suffix(".json").exists():
+        candidate = OUTPUT_DIR / f"{stem}_{version}.txt"
+        version += 1
+    return candidate
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print('  python generate_text.py "your topic"')
-        print()
-        print("Example:")
-        print('  python generate_text.py "Neural Networks"')
-        sys.exit(1)
-
-    topic = " ".join(sys.argv[1:]).strip()
-
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-    filename = safe_filename(topic)
-    output_path = os.path.join(OUTPUT_DIR, filename)
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("topic", nargs="+", help="Subject for the educational text")
+    parser.add_argument("--model", default=MODEL, help=f"Ollama model (default: {MODEL})")
+    parser.add_argument("--num-predict", type=int, default=NUM_PREDICT,
+                        help=f"Maximum output tokens (default: {NUM_PREDICT})")
+    args = parser.parse_args()
+    if args.num_predict < 1:
+        parser.error("--num-predict must be positive")
+    topic = " ".join(args.topic).strip()
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     try:
-        text = generate_text(topic)
+        text = generate_text(topic, args.model, args.num_predict)
+        output_path = available_path(topic)
+        output_path.write_text(text + "\n", encoding="utf-8")
+        metadata = {
+            "synthetic": True,
+            "topic": topic,
+            "model": args.model,
+            "num_predict_limit": args.num_predict,
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "text_file": output_path.name,
+            "review_status": "unreviewed",
+        }
+        output_path.with_suffix(".json").write_text(
+            json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+        )
 
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(text)
-
-        print("Generation complete!")
-        print()
+        print("Generation complete.")
         print(f"Characters: {len(text):,}")
         print(f"Words:      {len(text.split()):,}")
-        print(f"Saved to:   {output_path}")
-
-    except Exception as e:
-        print(f"ERROR: {e}")
+        print(f"Saved text: {output_path.relative_to(ROOT)}")
+        print(f"Metadata:   {output_path.with_suffix('.json').relative_to(ROOT)}")
+        print("This is synthetic text. Review it and its source provenance before training on it.")
+    except Exception as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
 
 

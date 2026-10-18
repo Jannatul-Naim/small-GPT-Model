@@ -1,53 +1,40 @@
-"""Small-GPT configuration tuned for an NVIDIA RTX 3060 12GB."""
+"""Research-grade Small-GPT configuration for RTX 3060 12GB."""
 
-# Practical default. The larger configuration is intentionally retained only
-# as a reference for future hardware.
-MODEL_SIZE = "small"
+MODEL_SIZE = "3060"
 
 CONFIGS = {
-    # ~40.5M parameters with the current tied-embedding architecture.
-    # This is intentionally conservative for a 12GB RTX 3060.
     "3060": {
-        "vocab_size": 32000,
-        "block_size": 384,
-        "dim": 512,
-        "n_layers": 8,
-        "n_heads": 8,
-        "n_kv_heads": 2,
-        "ffn_dim": 1536,
-        "dropout": 0.0,
-    },
-
-    "1.8b": {
-        "vocab_size": 32000,
-        "block_size": 2048,
-        "dim": 2048,
-        "n_layers": 24,
-        "n_heads": 16,
+        "vocab_size": 16384,
+        "block_size": 768,
+        "dim": 768,
+        "n_layers": 14,
+        "n_heads": 12,
         "n_kv_heads": 4,
-        "ffn_dim": 5504,
-        "dropout": 0.0,
+        "ffn_dim": 2048,
+        "dropout": 0.05,
     },
 }
 
-# RTX 3060-safe defaults:
-# 2 samples × 16 accumulation × 384 tokens = 12,288 tokens/optimizer step.
+# Optimizer-step settings. Effective batch = batch_size * accumulation.
 batch_size = 2
 gradient_accumulation_steps = 16
 
 learning_rate = 3e-4
+update_learning_rate = 6e-5
 weight_decay = 0.1
-max_steps = 5000
+betas = (0.9, 0.95)
+max_steps = 10000
+warmup_steps = 500
 eval_interval = 250
-eval_iters = 10
+eval_iters = 20
 grad_clip = 1.0
-
-# Saves activation memory by checkpointing Transformer blocks during training.
 gradient_checkpointing = True
+min_lr_ratio = 0.1
+seed = 1337
 
-# More robust checkpointing: gpt.pt is the latest resumable checkpoint;
-# gpt-best.pt stores the best validation loss seen so far.
+# Continual-learning replay. During --mode update, each optimizer step mixes
+# a fraction of old tokens with new-domain tokens.
+replay_ratio = 0.35
+
 checkpoint_path = "checkpoints/gpt.pt"
 best_checkpoint_path = "checkpoints/gpt-best.pt"
-
-seed = 1337
