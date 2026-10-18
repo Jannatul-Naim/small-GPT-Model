@@ -2,11 +2,18 @@
 from pathlib import Path
 import json, math, re
 from collections import Counter,defaultdict
+
+
+
 ROOT=Path(__file__).resolve().parent; CHUNKS=ROOT/'data/raw/chunks.jsonl'; WORD=re.compile(r"[A-Za-z0-9_+#.-]+")
 
+
 def toks(s): return [x.lower() for x in WORD.findall(s)]
+
 class Retriever:
- def __init__(self): self.refresh()
+ 
+ def __init__(self): 
+  self.refresh()
  def refresh(self):
   self.chunks=[]; self.post=defaultdict(list); self.df=Counter()
   if not CHUNKS.exists(): return

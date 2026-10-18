@@ -199,19 +199,22 @@ def write_training_binaries(rows: list[dict], reuse_tokenizer: bool, vocab_size:
     new_ids = set(json.loads(NEW_IDS.read_text(encoding="utf-8"))) if NEW_IDS.exists() else set()
     train: list[list[int]] = []
     val: list[list[int]] = []
-    new_tokens: list[list[int]] = []
-    old_tokens: list[list[int]] = []
+    train_sources: list[str] = []
+    val_sources: list[str] = []
+    token_ids_by_source: dict[str, list[int]] = {}
 
     for row in rows:
         ids = tok.encode(row["text"])
         if len(ids) < 769:
             continue
+        token_ids_by_source[row["id"]] = ids
         h = int(hashlib.sha256(row["id"].encode()).hexdigest()[:8], 16)
-        (val if h % 100 < val_percent else train).append(ids)
-        if row["id"] in new_ids:
-            new_tokens.append(ids)
+        if h % 100 < val_percent:
+            val.append(ids)
+            val_sources.append(row["id"])
         else:
-            old_tokens.append(ids)
+            train.append(ids)
+            train_sources.append(row["id"])
 
     # Keep the split source-level and leakage-safe. For very small corpora, the
     # hash bucket can otherwise place every source on the same side, so fall back
@@ -229,10 +232,30 @@ def write_training_binaries(rows: list[dict], reuse_tokenizer: bool, vocab_size:
             # Rebuild train/val from qualifying source ids to avoid token leakage.
             train = []
             val = []
+            train_sources = []
+            val_sources = []
             for h, sid, ids in candidates:
-                (val if sid == chosen[1] else train).append(ids)
+                if sid == chosen[1]:
+                    val.append(ids)
+                    val_sources.append(sid)
+                else:
+                    train.append(ids)
+                    train_sources.append(sid)
     if not train or not val:
         raise ValueError("Need at least two distinct, sufficiently long sources for train/validation splits.")
+
+    # Update/replay binaries must never include held-out validation sources.
+    # Otherwise a continual update could train on the very material used to
+    # report its validation score.
+    new_id_set = set(new_ids)
+    new_tokens = [token_ids_by_source[sid] for sid in train_sources if sid in new_id_set]
+    old_tokens = [token_ids_by_source[sid] for sid in train_sources if sid not in new_id_set]
+    if new_id_set and not new_tokens:
+        raise ValueError("New sources are present, but none landed in the training split. Add more new sources so at least one is assigned to training.")
+    if not new_tokens:
+        new_tokens = old_tokens[:1]
+    if not old_tokens:
+        old_tokens = train[:1]
 
     from array import array
 
@@ -256,6 +279,14 @@ def write_training_binaries(rows: list[dict], reuse_tokenizer: bool, vocab_size:
                 h.update(block)
         return h.hexdigest()
 
+    split_path = PROCESSED / "split.json"
+    split_path.write_text(json.dumps({
+        "strategy": "sha256(source_id) mod 100",
+        "validation_percent": val_percent,
+        "train_source_ids": sorted(train_sources),
+        "validation_source_ids": sorted(val_sources),
+    }, indent=2), encoding="utf-8")
+
     meta = {
         "vocab_size": tok.vocab_size,
         "sources": len(rows),
@@ -265,6 +296,13 @@ def write_training_binaries(rows: list[dict], reuse_tokenizer: bool, vocab_size:
         "new_tokens": new_n,
         "replay_tokens": replay_n,
         "tokenizer_sha256": file_sha(VOCAB),
+        "train_sha256": file_sha(PROCESSED / "train.bin"),
+        "val_sha256": file_sha(PROCESSED / "val.bin"),
+        "new_sha256": file_sha(PROCESSED / "new.bin"),
+        "replay_sha256": file_sha(PROCESSED / "replay.bin"),
+        "split_sha256": file_sha(split_path),
+        "split_strategy": "sha256(source_id) mod 100",
+        "validation_percent": val_percent,
         "schema_version": 2,
     }
     META.write_text(json.dumps(meta, indent=2), encoding="utf-8")

@@ -1,260 +1,307 @@
-# Small-GPT v3 — Research-Grade Continual Domain Expert
+# Small-GPT: an educational research project
 
-Designed for the supplied **RTX 3060 12GB + 32GB RAM + Ryzen 5 7600**.
+Small-GPT is a decoder-only language model and data pipeline for learning how
+to build, train, evaluate, and update a small model locally. The repository is
+designed to support controlled experiments on a single consumer GPU (the
+default profile targets a 12 GB RTX 3060), while keeping the code compact enough
+to study.
 
-## Research objective
+The architecture and pipeline are research tools; the project is not a
+validated domain expert until a specific dataset, training run, and evaluation
+show that it performs well. Use the experiment procedure below to make that
+claim responsibly.
 
-Build a local decoder-only language model that can be trained from scratch,
-then updated day by day on a focused subject while keeping previous knowledge,
-using retrieval for immediately available current information.
+## What is included
 
-## Training flow
+- A roughly 100M-parameter decoder-only Transformer with RMSNorm, RoPE,
+  grouped-query attention, SwiGLU, and tied input/output embeddings.
+- A source-aware pipeline for local PDF, TXT, and HTML files, with optional
+  URLs, normalization, filtering, exact deduplication, chunking, and a BPE
+  tokenizer.
+- Pretraining, resume, and replay-based continual-update modes.
+- Local lexical retrieval and a small web interface.
+- Optional Ollama-based synthetic educational text generation, saved separately
+  from the primary source corpus.
+- Fixed-window held-out loss/perplexity reporting with data and tokenizer
+  hashes (`evaluation.py`).
 
-```text
-PHASE 0  Environment/GPU check
-        ↓
-PHASE 1  Ingest permitted PDF + TXT + HTML + web sources
-        ↓
-PHASE 2  Normalize + quality gate + exact/version deduplication
-        ↓
-PHASE 3  Chunk knowledge for retrieval + source provenance
-        ↓
-PHASE 4  Train tokenizer ONCE (16,384 vocab)
-        ↓
-PHASE 5  Build uint16 train/validation/replay binaries
-        ↓
-PHASE 6  Pretrain Small-GPT from scratch
-        ↓
-PHASE 7  Evaluate validation loss/perplexity
-        ↓
-PHASE 8  Add new topic material
-        ↓
-PHASE 9  Retrieval becomes current immediately
-        ↓
-PHASE 10 Continual update = new data + replay old data
-        ↓
-PHASE 11 Re-evaluate against fixed questions
-        ↓
-PHASE 12 Stream answers through local web UI
-```
+## Quick start
 
-## v3 model
+### 1. Prepare an environment
 
-```text
-vocab       16,384
-context        768
-hidden dim     768
-layers          14
-query heads     12
-KV heads         4
-FFN           2048
-GQA             yes
-RoPE            yes
-RMSNorm         yes
-SwiGLU          yes
-weight tying    yes
-```
-
-This is approximately **100M parameters**, rather than the earlier ~44M profile.
-The configuration is intentionally below the 12GB limit so there is room for
-training overhead.
-
-## 1. Install
+Use Python 3.10 or newer. Create an isolated environment and install the
+dependencies:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Check CUDA:
+Confirm PyTorch can see the GPU:
 
 ```bash
-python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
 ```
 
-## 2. Build the first corpus
+The model can run on CPU for code study, but training the default model on CPU
+is not a practical full experiment.
 
-The recommended v3 data engine accepts local PDF/TXT/HTML files recursively. Put permitted material in:
+### 2. Choose and document a small domain
+
+Pick a subject narrow enough to evaluate, such as introductory control
+systems, a particular biology unit, or a software library version. Collect
+material you have permission to use: your own notes, open textbooks, public
+technical documentation, or datasets whose terms explicitly allow your
+intended use. Record each source's title, author/organization, URL or file,
+access date, license/terms, and any modifications. Do not use an arbitrary web
+dump or assume that publicly reachable text is reusable.
+
+For the first meaningful run, aim for at least several hundred thousand
+training tokens and preferably millions. Include multiple independent sources
+and enough held-out sources for evaluation. The engine needs at least two
+distinct sources with 769 or more tokens after tokenization to create both
+training and validation sets. A tiny corpus is useful for a smoke run, not for
+claims about general performance.
+
+### Optional: generate a synthetic lesson
+
+Install and start Ollama separately, then run:
+
+```bash
+python generate_text.py "Neural Networks"
+```
+
+The default model is `gpt-oss:120b-cloud`; change it with `--model` if needed.
+Control the requested output limit with `--num-predict` (default: 20,000):
+
+```bash
+python generate_text.py --num-predict 3000 "Neural Networks"
+```
+
+Text is saved under `data/text/`, with a JSON sidecar labeling it synthetic
+and recording the model and generation time. Repeated runs get a new filename
+instead of replacing the earlier result. These files are **not** ingested by
+the training pipeline by default. Review factual claims against sources and
+keep the sidecar; only copy reviewed files into `data/ingest/synthetic/` when
+you intentionally want to study synthetic-data augmentation. Preserve the
+original source corpus and evaluate on held-out material that was not used in
+the generation prompt.
+
+Place files in the following layout:
 
 ```text
 data/ingest/
-    papers/
-    notes/
-    web/
+  books/
+  course-notes/
+  documentation/
 ```
 
-You can also keep URLs in `data/links.txt`. Then run the complete pipeline in one command:
+Optionally add permitted URLs, one per line, to `data/links.txt`. A URL fetch
+may fail because of site rules, access controls, or format; prefer downloading
+permitted material yourself and retaining its provenance.
+
+### 3. Build the dataset and tokenizer
+
+For the first run, train the tokenizer and build the files consumed by the
+trainer:
 
 ```bash
-python -m dataset.engine
+python -m dataset.engine --input data/ingest --no-web
 ```
 
-For a later run, keep the tokenizer fixed:
+To fetch the permitted URLs from `data/links.txt`, omit `--no-web`:
 
 ```bash
-python -m dataset.engine --reuse-tokenizer
+python -m dataset.engine --input data/ingest
 ```
 
-The engine extracts text, normalizes it, applies deterministic quality gates,
-deduplicates exact content, tracks changed-source versions, creates metadata-rich
-retrieval chunks, and writes the same `train.bin` / `val.bin` / `new.bin` /
-`replay.bin` files consumed by the existing trainer.
+Inspect these outputs before training:
 
-The older three-stage commands (`dataset.collect`, `dataset.chunk`,
-`dataset.prepare`) remain available for compatibility.
+```text
+data/raw/sources.jsonl       extracted source text and provenance
+data/raw/chunks.jsonl        retrieval chunks with source metadata
+data/raw/stats.json          accepted, skipped, duplicate, and source counts
+data/processed/meta.json     token counts and content hashes
+data/processed/split.json    source IDs assigned to train and validation
+data/processed/vocab.json    fixed tokenizer vocabulary
+```
 
-**Do not use random web dumps.** Your corpus should be relevant, clean, and
-legally usable for your experiment.
+Check that the sources were extracted cleanly and that the validation sources
+are genuinely held out. A source-level split prevents a source appearing on
+both sides of the split; it does not prevent leakage if another source repeats
+the same content or if evaluation questions/answers are copied into training
+material. Clean and deduplicate those cases yourself.
 
-## 3. First training
+### 4. Run a short smoke training
 
-For a real experiment, don't repeat the previous 88k-token run. Start with
-at least several hundred thousand tokens and preferably millions.
+This catches setup and data problems without committing to a long run:
+
+```bash
+python -m training.train --mode new --steps 10
+```
+
+If it completes, start the planned training run. Save the terminal output and
+the exact command in your experiment notes:
 
 ```bash
 python -m training.train --mode new --steps 5000
 ```
 
-Watch validation loss. A training loss collapsing toward zero while validation
-loss rises is overfitting; add data or reduce training rather than blindly
-running more steps.
+The trainer prints validation loss at intervals and writes checkpoints under
+`checkpoints/`. Watch for training instability or validation loss rising while
+training loss falls. The step count is an example budget, not a guarantee of
+convergence; choose it based on validation results and available compute.
 
-## 4. Daily domain learning
-
-Example:
-
-```text
-data/topics/robotics/
-    day01_kinematics.txt
-    day01_vision.txt
-    day02_inverse_kinematics.txt
-```
-
-Run:
+To continue an interrupted run, use the matching processed data and tokenizer:
 
 ```bash
-python -m pipeline.learn --topic "robotics" --steps 1500
+python -m training.train --mode resume --steps 1000
 ```
 
-The pipeline collects everything, detects new sources, reuses the existing
-tokenizer, rebuilds retrieval chunks, and runs a continual update.
+Resume and update now stop if the loaded checkpoint tokenizer hash differs
+from the current vocabulary. Keep a copy of `vocab.json` with each checkpoint.
 
-### Why replay matters
+### 5. Evaluate the checkpoint
 
-An update samples roughly:
-
-```text
-65% new material
-35% old/replay material
-```
-
-The exact ratio is in `training/config.py`.
-
-This reduces catastrophic forgetting compared with training only on today's
-new files.
-
-## 5. Resume interrupted training
+Run a fixed set of held-out validation windows and save the machine-readable
+report:
 
 ```bash
-python -m training.train --mode resume --steps 5000
+python evaluation.py \
+  --checkpoint checkpoints/gpt-best.pt \
+  --batches 100 \
+  --seed 2026 \
+  --output reports/baseline-validation.json
 ```
 
-This restores model + optimizer + step.
+The report includes validation loss in nats/token, perplexity, checkpoint
+step, tokenizer and validation-data hashes, and the recorded source split. The
+same seed and batch settings select the same windows. Compare checkpoints only
+when they use the same tokenizer, validation data, and evaluation settings.
 
-## 6. Real-time knowledge
+Perplexity measures next-token prediction on this validation text. It is not a
+score for factual accuracy, reasoning, or usefulness. Also keep a separate
+fixed set of domain questions with reference answers. Have a person score each
+answer with a written rubric (for example: correctness, evidence, completeness,
+and unsupported claims), and retain both good and failed examples. Do not
+silently change the question set or scoring rubric between runs.
 
-Start:
+Generate a sample from the trained model with:
+
+```bash
+python -m generation.generate \
+  --prompt "Explain the key idea in this topic:" \
+  --max-new-tokens 160
+```
+
+Generation is qualitative inspection; it does not replace the held-out
+evaluation.
+
+### 6. Run a controlled continual-learning experiment
+
+Formulate the question first. A useful starter question is:
+
+> Does replay data reduce loss of old-topic performance when the model is
+> updated on new-topic material?
+
+Create fixed old-topic and new-topic evaluation sets that are kept out of all
+training sources. Save the pretrained checkpoint and make a copy for each
+condition. Compare at least:
+
+| Condition | Update data | Purpose |
+|---|---|---|
+| No update | None | Baseline drift/control |
+| New only | New-topic sources | Measures adaptation and forgetting without replay |
+| New + replay | New-topic and old-topic sources | Tests the replay hypothesis |
+
+Put new permitted source files under `data/topics/`, retaining topic folders
+and a source log. Rebuild while keeping the original tokenizer fixed:
+
+```bash
+python -m dataset.engine --input data/topics --no-web --reuse-tokenizer
+python -m training.train --mode update --steps 1500
+```
+
+The current update mode samples replay batches with the configured probability
+in `training/config.py`; this is a batch-level sampling probability, not a
+guaranteed exact token ratio for a short run. Run the new-only condition by
+setting `replay_ratio = 0.0` for that run, then restore the setting and run
+new-plus-replay from the same original checkpoint. Keep each condition's
+checkpoint and report separate. Do not compare sequentially updated models as
+if each were an independent condition.
+
+Evaluate both old- and new-topic question sets for every condition. Report the
+change from the no-update baseline: new-topic gain and old-topic retention.
+Repeat with at least three random training seeds for stronger evidence, and
+report every run or the mean and spread; do not report only the best run.
+
+### 7. Optional retrieval comparison
+
+The local retrieval index uses lexical matching over `data/raw/chunks.jsonl`.
+Start the web interface with:
 
 ```bash
 python -m web.server
 ```
 
-Open:
+Then visit `http://127.0.0.1:8000`. To study retrieval, compare model-only
+answers with retrieval-assisted answers on the same held-out questions. Record
+the retrieved source IDs and whether the answer is supported by them. Retrieval
+can expose current source text to an answer flow, but it does not change model
+weights or establish that the model learned that information.
 
-```text
-http://127.0.0.1:8000
-```
+## What to save for every experiment
 
-Retrieval uses the newest indexed chunks. Therefore a new source does not have
-to wait for a complete neural training cycle before it can be searched.
+Create a folder per experiment and preserve:
 
-## 7. Generate from terminal
+- Research question, hypotheses, conditions, and scoring rubric.
+- Git commit or source snapshot, exact commands, config, and random seeds.
+- Hardware, operating system, Python, PyTorch, and CUDA versions.
+- Source manifest, licenses/terms, extraction decisions, and dataset hashes.
+- Tokenizer hash, source split, train/validation token counts, and checkpoint.
+- Training and validation curves, evaluation JSON, question-level scores, and
+  representative failures.
+- Any deviations from the planned experiment.
 
-```bash
-python -m generation.generate --prompt "Explain inverse kinematics" --max-new-tokens 200 --temperature 0.75 --top-k 40 --top-p 0.92 --repetition-penalty 1.08
-```
+Do not publish source text unless the license permits redistribution. Publishing
+source IDs, hashes, collection methods, and transformation scripts can still
+make a study easier to reproduce.
 
-## 8. Benchmark
+## Educational path through the code
 
-```bash
-python experiments/benchmark.py
-```
+1. Follow a source through `dataset/engine.py`: extraction, normalization,
+   splitting, tokenization, and binary output.
+2. Trace `training/train.py`: random context windows, next-token targets,
+   cross-entropy, gradient accumulation, optimizer step, and checkpoint.
+3. Study `model/modern_gpt.py`: one token batch through embeddings, attention,
+   residual blocks, logits, and loss.
+4. Change one experimental variable at a time (for example, replay ratio or
+   model size) and explain the prediction before running it.
+5. Compare quantitative metrics with generated examples and discuss where the
+   metrics fail to capture answer quality.
 
-Keep a fixed evaluation set in `data/eval_questions.txt`. Compare the same
-questions after each update.
+## Current limits and honest claims
 
-## 9. Research measurements to record
+- The default model is randomly initialized and trained from scratch; it needs
+  much more high-quality text than a tiny demo corpus.
+- The tokenizer is a compact project implementation, not a claim of parity
+  with production tokenizers.
+- Validation loss/perplexity only reflects the selected held-out text.
+- The question-based answer score is human-rated unless you build and validate
+  a separate automatic evaluator.
+- Replay may help retention, but its effect must be measured against matched
+  controls. It is not guaranteed by the implementation.
+- Results on one small corpus and one GPU do not establish broad language
+  ability or general research conclusions.
 
-For each run, record:
+## Suggested report outline
 
-- corpus tokens
-- new tokens
-- replay tokens
-- parameter count
-- GPU memory
-- GPU utilization
-- training loss
-- validation loss
-- validation perplexity
-- tokens/second
-- update steps
-- domain benchmark score
-- hallucination/error examples
-
-A research project should show these numbers instead of only saying "the model
-trained successfully."
-
-## 10. Recommended research progression
-
-### Experiment A — baseline
-
-General corpus → pretraining → fixed evaluation.
-
-### Experiment B — domain adaptation
-
-General model → 1 focused domain → evaluation.
-
-### Experiment C — continual learning
-
-Day 1 → Day 7 → Day 14 → replay updates → forgetting measurement.
-
-### Experiment D — retrieval vs training
-
-Compare:
-
-```text
-model only
-model + retrieval
-model + continual training
-model + continual training + retrieval
-```
-
-This can become a strong university research experiment.
-
-## 11. Next upgrades after v3
-
-The v3 data engine now includes PDF/HTML/TXT extraction with provenance. Add the remaining upgrades one at a time:
-
-1. Sentence-transformer embeddings + FAISS.
-2. Hybrid BM25 + vector retrieval.
-4. Topic router.
-5. Instruction-tuning dataset.
-6. LoRA adapters for multiple specialist domains.
-7. Automatic evaluation with held-out QA.
-8. TensorBoard/W&B-style experiment logging.
-9. Quantized inference.
-10. Knowledge graphs for structured domain facts.
-
-Do not add all ten at once. First establish a reproducible baseline.
+1. Research question and hypothesis
+2. Data sources, licenses, filtering, and split
+3. Model, tokenizer, optimizer, and compute budget
+4. Experimental conditions and seeds
+5. Validation loss/perplexity and domain-question results
+6. Old-topic retention, new-topic gain, and failure examples
+7. Limitations, deviations, and what the evidence supports
