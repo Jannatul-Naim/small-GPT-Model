@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 TOPICS = ROOT / "data/topics"
-CK = ROOT / "checkpoints/gpt.pt"
+CK = ROOT / "checkpoints/gpt-best.pt"
 VOCAB = ROOT / "data/processed/vocab.json"
 
 

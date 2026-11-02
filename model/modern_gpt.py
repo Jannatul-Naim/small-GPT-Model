@@ -721,6 +721,8 @@ class ModernGPT(nn.Module):
         top_k: int = 40,
         top_p: float = 1.0,
         repetition_penalty: float = 1.0,
+        eos_id: int | None = None,
+        min_new_tokens: int = 0,
     ) -> torch.Tensor:
         """Generate new tokens autoregressively.
 
@@ -741,6 +743,11 @@ class ModernGPT(nn.Module):
                 randomness; lower values make sampling more deterministic.
             top_k: If non-zero, only the K highest-scoring tokens are
                 considered during sampling.
+            eos_id: If set, stop once every sequence in the batch has just
+                produced this token.
+            min_new_tokens: Number of tokens to generate before ``eos_id`` is
+                allowed, so a prompt that looks like the end of a document
+                still gets a reply.
 
         Returns:
             Token IDs containing the original prompt followed by the
@@ -750,7 +757,7 @@ class ModernGPT(nn.Module):
         # computation overhead during inference.
         self.eval()
 
-        for _ in range(max_new_tokens):
+        for step in range(max_new_tokens):
             # Limit the input to the model's supported context window.
             # This allows generation to continue even after the sequence
             # becomes longer than block_size.
@@ -769,6 +776,9 @@ class ModernGPT(nn.Module):
                 -1,
                 :
             ]
+
+            if eos_id is not None and step < min_new_tokens:
+                logits[:, eos_id] = float("-inf")
 
             # Penalize tokens already present in the current context.
             if repetition_penalty != 1.0:
@@ -821,5 +831,8 @@ class ModernGPT(nn.Module):
                 [idx, next_token],
                 dim=1,
             )
+
+            if eos_id is not None and (next_token == eos_id).all():
+                break
 
         return idx

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import math
 import os
 import random
@@ -158,8 +159,34 @@ def lr(step, total, peak):
     )
 
 
-def payload(model, opt, step, best, cfg, tokhash):
-    """Build a checkpoint containing model, optimizer, and RNG state."""
+def make_optimizer(model, peak, param_groups=2):
+    """Create AdamW without decaying normalization scales or the tied embedding."""
+    if param_groups == 1:
+        # Version 3 checkpoints saved one group and must resume with one.
+        groups = model.parameters()
+    else:
+        embedding = model.embedding.weight
+        decay = []
+        no_decay = []
+
+        for p in model.parameters():
+            (no_decay if p.ndim < 2 or p is embedding else decay).append(p)
+
+        groups = [
+            {"params": decay, "weight_decay": config.weight_decay},
+            {"params": no_decay, "weight_decay": 0.0},
+        ]
+
+    return torch.optim.AdamW(
+        groups,
+        lr=peak,
+        betas=config.betas,
+        weight_decay=config.weight_decay,
+    )
+
+
+def payload(model, opt, step, best, cfg, tokhash, run):
+    """Build a checkpoint containing model, optimizer, schedule, and RNG state."""
     state = {
         "python": random.getstate(),
         "numpy": np.random.get_state(),
@@ -177,7 +204,8 @@ def payload(model, opt, step, best, cfg, tokhash):
         "config": cfg,
         "tokenizer_sha256": tokhash,
         "rng_state": state,
-        "version": 3,
+        "run": run,
+        "version": 4,
     }
 
 
@@ -188,10 +216,13 @@ def restore_rng(state):
 
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
+    # The checkpoint is loaded with map_location=device, which moves even
+    # the CPU RNG ByteTensor to CUDA during GPU training. CPU RNG state must
+    # be restored from a CPU ByteTensor.
+    torch.set_rng_state(state["torch"].cpu())
 
     if torch.cuda.is_available() and "cuda" in state:
-        torch.cuda.set_rng_state_all(state["cuda"])
+        torch.cuda.set_rng_state_all([rng.cpu() for rng in state["cuda"]])
 
 
 def main():
@@ -207,8 +238,31 @@ def main():
         "--steps",
         type=int,
     )
+    ap.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        default=CKPT.parent,
+        help="Directory for this run's checkpoints",
+    )
+    ap.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Allow --mode new to replace existing checkpoints",
+    )
 
     args = ap.parse_args()
+
+    ckpt_path = args.checkpoint_dir / CKPT.name
+    best_path = args.checkpoint_dir / BEST.name
+
+    if args.mode == "new" and not args.overwrite:
+        existing = [str(p) for p in (ckpt_path, best_path) if p.exists()]
+
+        if existing:
+            raise SystemExit(
+                f"Refusing to replace {', '.join(existing)}. Use "
+                "--checkpoint-dir for a separate run, or --overwrite."
+            )
 
     # Initialize random seeds and select the device
     torch.manual_seed(config.seed)
@@ -245,28 +299,23 @@ def main():
 
     # Initialize a new training run
     if args.mode == "new":
-        train = load_bin("train.bin")
-
         model = ModernGPT(**cfg).to(device)
-
-        opt = torch.optim.AdamW(
-            model.parameters(),
-            lr=config.learning_rate,
-            betas=config.betas,
-            weight_decay=config.weight_decay,
-        )
+        opt = make_optimizer(model, config.learning_rate)
 
         start = 0
         best = float("inf")
-        peak = config.learning_rate
+        run = {
+            "mode": "new",
+            "peak_lr": config.learning_rate,
+            "total_steps": args.steps or config.max_steps,
+        }
+        steps = run["total_steps"]
 
     # Resume a previous training run
     elif args.mode == "resume":
-        train = load_bin("train.bin")
-
         ck = torch.load(
-            CKPT,
-            map_location=device,
+            ckpt_path,
+            map_location="cpu",
             weights_only=False,
         )
 
@@ -281,28 +330,50 @@ def main():
         model = ModernGPT(**cfg).to(device)
         model.load_state_dict(ck["model_state"])
 
-        opt = torch.optim.AdamW(
-            model.parameters(),
-            lr=config.learning_rate,
-            betas=config.betas,
-            weight_decay=config.weight_decay,
-        )
-
-        opt.load_state_dict(ck["optimizer_state"])
-
         start = int(ck["step"]) + 1
         best = float(ck.get("best_val", float("inf")))
-        peak = config.learning_rate
+
+        # Older checkpoints did not record their schedule. Treating it as
+        # finished holds the minimum learning rate instead of re-warming.
+        run = ck.get("run") or {
+            "mode": "new",
+            "peak_lr": config.learning_rate,
+            "total_steps": start,
+        }
+
+        opt = make_optimizer(
+            model,
+            run["peak_lr"],
+            len(ck["optimizer_state"]["param_groups"]),
+        )
+        opt.load_state_dict(ck["optimizer_state"])
 
         restore_rng(ck.get("rng_state"))
+        del ck
+
+        steps = args.steps or run["total_steps"] - start
+
+        if steps <= 0:
+            raise SystemExit(
+                f"The checkpoint's run ended at step {run['total_steps']}. "
+                "Pass --steps to train further at the minimum learning rate."
+            )
 
         print("Resuming:", start)
 
-    # Continue training with new data and replay data
+    # Continue training the best checkpoint with new data and replay data
     else:
+        meta = json.loads((DATA / "meta.json").read_text(encoding="utf-8"))
+
+        if not meta.get("new_sources"):
+            raise SystemExit(
+                "The last data build found no new sources, so new.bin holds "
+                "only fallback data. Add material and rebuild before updating."
+            )
+
         ck = torch.load(
-            CKPT,
-            map_location=device,
+            best_path,
+            map_location="cpu",
             weights_only=False,
         )
 
@@ -316,27 +387,34 @@ def main():
         cfg = dict(ck["config"])
         model = ModernGPT(**cfg).to(device)
         model.load_state_dict(ck["model_state"])
+        del ck
 
-        new = load_bin("new.bin")
-        replay = load_bin("replay.bin")
-
-        opt = torch.optim.AdamW(
-            model.parameters(),
-            lr=config.update_learning_rate,
-            betas=config.betas,
-            weight_decay=config.weight_decay,
-        )
+        opt = make_optimizer(model, config.update_learning_rate)
 
         start = 0
-        best = float("inf")
-        peak = config.update_learning_rate
-        train = None
+        run = {
+            "mode": "update",
+            "peak_lr": config.update_learning_rate,
+            "total_steps": args.steps or config.max_steps,
+        }
+        steps = run["total_steps"]
+
+        # Score the base model first so that gpt-best.pt is only replaced by
+        # an update that really improves on it.
+        best = evaluate(model, val, cfg, device)
+        print(f"Base validation loss: {best:.4f}")
+
+    if run["mode"] == "update":
+        new = load_bin("new.bin")
+        replay = load_bin("replay.bin")
 
         print(
             f"Continual update: new={len(new):,} "
             f"replay={len(replay):,} tokens; "
             f"replay ratio={config.replay_ratio}"
         )
+    else:
+        train = load_bin("train.bin")
 
     # Configure the model and training loop
     model.gradient_checkpointing = config.gradient_checkpointing
@@ -355,8 +433,6 @@ def main():
         * cfg["block_size"],
     )
 
-    steps = args.steps or config.max_steps
-
     scaler = torch.amp.GradScaler(
         "cuda",
         enabled=device == "cuda",
@@ -364,15 +440,18 @@ def main():
 
     opt.zero_grad(set_to_none=True)
 
+    train_loss = 0.0
+    train_steps = 0
+
     # Training loop
     for step in range(start, start + steps):
-        current_lr = lr(step - start, steps, peak)
+        current_lr = lr(step, run["total_steps"], run["peak_lr"])
 
         for g in opt.param_groups:
             g["lr"] = current_lr
 
         for micro in range(config.gradient_accumulation_steps):
-            if args.mode == "update":
+            if run["mode"] == "update":
                 # Independent batches approximate the token-level replay ratio.
                 use_replay = (
                     torch.rand(()) < config.replay_ratio
@@ -395,6 +474,9 @@ def main():
                 loss = loss / config.gradient_accumulation_steps
 
             scaler.scale(loss).backward()
+            train_loss += loss.item()
+
+        train_steps += 1
 
         scaler.unscale_(opt)
 
@@ -417,34 +499,38 @@ def main():
 
             print(
                 f"step {step:6d} | "
+                f"train {train_loss / train_steps:.4f} | "
                 f"val {v:.4f} | "
                 f"lr {current_lr:.2e}"
             )
+
+            train_loss = 0.0
+            train_steps = 0
 
             if v < best:
                 best = v
 
                 atomic(
-                    payload(model, opt, step, best, cfg, tokhash),
-                    BEST,
+                    payload(model, opt, step, best, cfg, tokhash, run),
+                    best_path,
                 )
 
                 print("best checkpoint saved")
 
             atomic(
-                payload(model, opt, step, best, cfg, tokhash),
-                CKPT,
+                payload(model, opt, step, best, cfg, tokhash, run),
+                ckpt_path,
             )
 
     # Save the final checkpoint
     final = start + steps - 1
 
     atomic(
-        payload(model, opt, final, best, cfg, tokhash),
-        CKPT,
+        payload(model, opt, final, best, cfg, tokhash, run),
+        ckpt_path,
     )
 
-    print("Training complete:", CKPT)
+    print("Training complete:", ckpt_path)
 
 
 if __name__ == "__main__":

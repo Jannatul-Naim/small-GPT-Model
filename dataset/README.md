@@ -34,7 +34,7 @@ The engine performs:
 6. retrieval chunk generation with source metadata
 7. BPE tokenizer training or reuse
 8. source-level train/validation splitting
-9. `uint16` token binary generation
+9. `uint16` token binary generation, with an EOS token after each source
 10. provenance/statistics files
 
 ## Reuse the tokenizer

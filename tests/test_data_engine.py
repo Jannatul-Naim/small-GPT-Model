@@ -1,8 +1,23 @@
+import random
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from dataset.engine import canonical_file_id, chunk_text, normalize_text, quality, read_local
+import numpy as np
+
+from dataset import engine
+from dataset.engine import (
+    canonical_file_id,
+    chunk_text,
+    known_content_hashes,
+    normalize_text,
+    quality,
+    read_local,
+    sha256,
+    split_bucket,
+)
+from tokenizer.bpe import BPETokenizer
 
 
 class DataEngineTests(unittest.TestCase):
@@ -43,6 +58,62 @@ class DataEngineTests(unittest.TestCase):
             nested.parent.mkdir()
             nested.touch()
             self.assertEqual(canonical_file_id(nested, root), "file:papers/paper.txt")
+
+    def test_versions_of_a_source_share_a_split_bucket(self):
+        self.assertEqual(
+            split_bucket("file:a.txt#sha256:abc123"),
+            split_bucket("file:a.txt"),
+        )
+
+    def test_rows_saved_by_older_normalization_are_recognized(self):
+        # U+2011 survived the older cleaner but NFKC now rewrites it, so the
+        # stored hash alone would not match a re-read of the same file.
+        stored = "self‑esteem and resilience"
+        rows = {
+            "topic:old:/moved/path/a.txt": {
+                "id": "topic:old:/moved/path/a.txt",
+                "sha256": sha256(stored),
+                "text": stored,
+            }
+        }
+        self.assertNotEqual(sha256(normalize_text(stored)), sha256(stored))
+        self.assertEqual(
+            known_content_hashes(rows)[sha256(normalize_text(stored))],
+            "topic:old:/moved/path/a.txt",
+        )
+
+    def test_binaries_separate_sources_with_eos(self):
+        rng = random.Random(0)
+        words = ["trust", "family", "memory", "habit", "culture", "routine", "identity"]
+        rows = [
+            {
+                "id": f"file:doc{i}.txt",
+                "text": " ".join(rng.choice(words) for _ in range(1500)),
+            }
+            for i in range(6)
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            processed = Path(tmp)
+
+            with mock.patch.multiple(
+                engine,
+                PROCESSED=processed,
+                VOCAB=processed / "vocab.json",
+                META=processed / "meta.json",
+                NEW_IDS=processed / "new_sources.json",
+            ):
+                meta = engine.write_training_binaries(rows, False, 300, 50)
+
+            train = np.fromfile(processed / "train.bin", dtype=np.uint16)
+            val = np.fromfile(processed / "val.bin", dtype=np.uint16)
+
+        eos_total = int((train == BPETokenizer.EOS).sum() + (val == BPETokenizer.EOS).sum())
+        self.assertEqual(eos_total, len(rows))
+        self.assertEqual(train[-1], BPETokenizer.EOS)
+        self.assertEqual(val[-1], BPETokenizer.EOS)
+        self.assertEqual(meta["train_tokens"], len(train))
+        self.assertEqual(meta["val_tokens"], len(val))
 
 
 if __name__ == "__main__":
