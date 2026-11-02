@@ -760,7 +760,9 @@ button:disabled {
     animation: fade-up 180ms ease both;
 }
 
-.advanced-settings[hidden] {
+.advanced-settings[hidden],
+.setting-control[hidden],
+.settings-divider[hidden] {
     display: none;
 }
 

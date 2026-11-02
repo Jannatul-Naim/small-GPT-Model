@@ -10,11 +10,16 @@ import argparse
 import hashlib
 import html as html_lib
 import json
+import os
 import re
+import stat
+import tempfile
 import time
 import unicodedata
+from array import array
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterable
+from typing import IO, Iterable, Iterator
 
 import requests
 from bs4 import BeautifulSoup
@@ -41,6 +46,45 @@ SUPPORTED = {'.pdf': 'pdf', '.txt': 'text', '.html': 'html', '.htm': 'html'}
 DEFAULT_VOCAB_SIZE = 16384
 DEFAULT_CHARS = 1800
 DEFAULT_OVERLAP = 250
+TEMP_PREFIX = '._tmp_'
+
+# Writes that a power cut cannot leave half finished
+@contextmanager
+def atomic_open(path: Path, mode: str = 'w') -> Iterator[IO]:
+    """Write to a temp file, then rename it over path once it is safely on disk."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=TEMP_PREFIX, dir=path.parent)
+    try:
+        os.fchmod(fd, stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644)
+        with os.fdopen(fd, mode, encoding=None if 'b' in mode else 'utf-8') as f:
+            yield f
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    with atomic_open(path) as f:
+        f.write(text)
+
+
+def remove_leftover_temp_files() -> None:
+    """Delete temp files left behind if the power went during a write."""
+    for folder in (RAW, PROCESSED):
+        for leftover in folder.rglob(f'{TEMP_PREFIX}*'):
+            leftover.unlink()
+
+
+def file_sha(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open('rb') as f:
+        for block in iter(lambda: f.read(1 << 20), b''):
+            h.update(block)
+    return h.hexdigest()
+
 
 # Text normalization and validation
 def sha256(text: str) -> str:
@@ -138,18 +182,25 @@ def known_content_hashes(rows: dict[str, dict]) -> dict[str, str]:
 def load_previous() -> dict[str, dict]:
     rows: dict[str, dict] = {}
     if MANIFEST.exists():
-        for line in MANIFEST.read_text(encoding='utf-8', errors='ignore').splitlines():
-            try:
-                row = json.loads(line)
+        with MANIFEST.open(encoding='utf-8', errors='ignore') as f:
+            for number, line in enumerate(f, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    # Skipping the row would re-add its file under a new ID,
+                    # which can move it across the train/validation split.
+                    raise ValueError(
+                        f'{MANIFEST} line {number} is damaged. Restore the file before rebuilding.'
+                    ) from exc
                 if row.get('id'):
                     rows[row['id']] = row
-            except json.JSONDecodeError:
-                continue
     return rows
 
 
 def write_jsonl(path: Path, rows: Iterable[dict]) -> None:
-    with path.open('w', encoding='utf-8') as f:
+    with atomic_open(path) as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + '\n')
 
@@ -174,7 +225,7 @@ def chunk_text(text: str, chars: int, overlap: int) -> Iterable[str]:
 
 def build_chunks(rows: list[dict], chars: int, overlap: int) -> int:
     count = 0
-    with CHUNKS.open('w', encoding='utf-8') as out:
+    with atomic_open(CHUNKS) as out:
         for row in rows:
             for chunk_idx, text in enumerate(chunk_text(row['text'], chars, overlap)):
                 item = {
@@ -191,10 +242,40 @@ def build_chunks(rows: list[dict], chars: int, overlap: int) -> int:
     return count
 
 # Tokenizer and training binary generation
+def load_or_train_tokenizer(corpus: str, vocab_size: int) -> BPETokenizer:
+    """Keep the trained tokenizer in the cache so a rerun can skip training."""
+    key = sha256(f'{vocab_size}\n{corpus}')
+    path = PROCESSED / 'token_cache' / f'tokenizer-{key}.json'
+    if path.exists():
+        return BPETokenizer.load(path)
+    tok = BPETokenizer()
+    tok.train(corpus, vocab_size=vocab_size, min_frequency=2, verbose=True)
+    tok.save(path)
+    return tok
+
+
+def encode_cached(tok: BPETokenizer, text: str, cache_dir: Path) -> list[int]:
+    """Keep each source's tokens on disk so a rerun only encodes what is left."""
+    path = cache_dir / f'{sha256(text)}.bin'
+    if path.exists():
+        cached = array('H')
+        cached.frombytes(path.read_bytes())
+        return cached.tolist()
+    ids = tok.encode(text)
+    with atomic_open(path, 'wb') as f:
+        array('H', ids).tofile(f)
+    return ids
+
+
 def write_training_binaries(
-    rows: list[dict], reuse_tokenizer: bool, vocab_size: int, val_percent: int
+    rows: list[dict],
+    new_ids: Iterable[str],
+    reuse_tokenizer: bool,
+    vocab_size: int,
+    val_percent: int,
 ) -> dict:
     PROCESSED.mkdir(parents=True, exist_ok=True)
+    new_ids = set(new_ids)
     if reuse_tokenizer:
         if not VOCAB.exists():
             raise FileNotFoundError('No tokenizer found; run without --reuse-tokenizer first.')
@@ -203,19 +284,19 @@ def write_training_binaries(
         corpus = '\n\n'.join((r['text'] for r in rows))
         if len(corpus) < 100000:
             print('WARNING: corpus is below 100k characters; add more material for meaningful pretraining.')
-        tok = BPETokenizer()
-        tok.train(corpus, vocab_size=vocab_size, min_frequency=2, verbose=True)
-        tok.save(VOCAB)
+        tok = load_or_train_tokenizer(corpus, vocab_size)
     if tok.vocab_size > vocab_size:
         raise ValueError(f'Tokenizer overflow: {tok.vocab_size} > {vocab_size}')
-    new_ids = set(json.loads(NEW_IDS.read_text(encoding='utf-8'))) if NEW_IDS.exists() else set()
+    cache_dir = PROCESSED / 'token_cache' / sha256(json.dumps(tok.merges))[:16]
     train: list[list[int]] = []
     val: list[list[int]] = []
     train_sources: list[str] = []
     val_sources: list[str] = []
     token_ids_by_source: dict[str, list[int]] = {}
-    for row in rows:
-        ids = tok.encode(row['text'])
+    for index, row in enumerate(rows, start=1):
+        ids = encode_cached(tok, row['text'], cache_dir)
+        if index % 50 == 0 or index == len(rows):
+            print(f'Encoded {index}/{len(rows)} sources', flush=True)
         if len(ids) < 769:
             continue
         token_ids_by_source[row['id']] = ids
@@ -227,14 +308,10 @@ def write_training_binaries(
             train.append(ids)
             train_sources.append(row['id'])
     if not val and len(rows) >= 2:
-        candidates = []
-        for row in rows:
-            ids = tok.encode(row['text'])
-            if len(ids) >= 769:
-                h = split_bucket(row['id'])
-                candidates.append((h, row['id'], ids))
+        candidates = sorted(
+            (split_bucket(sid), sid, ids) for sid, ids in token_ids_by_source.items()
+        )
         if len(candidates) >= 2:
-            candidates.sort()
             chosen = candidates[0]
             train = []
             val = []
@@ -251,10 +328,9 @@ def write_training_binaries(
         raise ValueError(
             'Need at least two distinct, sufficiently long sources for train/validation splits.'
         )
-    new_id_set = set(new_ids)
-    new_tokens = [token_ids_by_source[sid] for sid in train_sources if sid in new_id_set]
-    old_tokens = [token_ids_by_source[sid] for sid in train_sources if sid not in new_id_set]
-    if new_id_set and (not new_tokens):
+    new_tokens = [token_ids_by_source[sid] for sid in train_sources if sid in new_ids]
+    old_tokens = [token_ids_by_source[sid] for sid in train_sources if sid not in new_ids]
+    if new_ids and (not new_tokens):
         raise ValueError(
             'New sources are present, but none landed in the training split. '
             'Add more new sources so at least one is assigned to training.'
@@ -264,31 +340,27 @@ def write_training_binaries(
     if not old_tokens:
         old_tokens = train[:1]
 
-    from array import array
-
     def write_bin(path: Path, token_lists: list[list[int]]) -> int:
         # EOS marks each source boundary and is what teaches the model to stop.
         total = 0
-        with path.open('wb') as f:
+        with atomic_open(path, 'wb') as f:
             for ids in token_lists:
                 array('H', [*ids, tok.EOS]).tofile(f)
                 total += len(ids) + 1
         return total
 
+    # The existing build stays untouched until here. meta.json goes last, so the
+    # trainer can tell if a power cut left a mix of old and new files.
+    if not reuse_tokenizer:
+        tok.save(VOCAB)
     train_n = write_bin(PROCESSED / 'train.bin', train)
     val_n = write_bin(PROCESSED / 'val.bin', val)
     new_n = write_bin(PROCESSED / 'new.bin', new_tokens if new_tokens else old_tokens[:1])
     replay_n = write_bin(PROCESSED / 'replay.bin', old_tokens if old_tokens else train[:1])
 
-    def file_sha(path: Path) -> str:
-        h = hashlib.sha256()
-        with path.open('rb') as f:
-            for block in iter(lambda: f.read(1 << 20), b''):
-                h.update(block)
-        return h.hexdigest()
-
     split_path = PROCESSED / 'split.json'
-    split_path.write_text(
+    atomic_write_text(
+        split_path,
         json.dumps(
             {
                 'strategy': 'sha256(base_source_id) mod 100',
@@ -298,7 +370,6 @@ def write_training_binaries(
             },
             indent=2,
         ),
-        encoding='utf-8',
     )
     meta = {
         'vocab_size': tok.vocab_size,
@@ -319,7 +390,7 @@ def write_training_binaries(
         'source_separator': 'EOS',
         'schema_version': 3,
     }
-    META.write_text(json.dumps(meta, indent=2), encoding='utf-8')
+    atomic_write_text(META, json.dumps(meta, indent=2))
     return meta
 
 # Pipeline entry point
@@ -351,9 +422,12 @@ def main() -> None:
         help='Approximate percentage of sources assigned to validation',
     )
     args = ap.parse_args()
+    if not 1 <= args.val_percent <= 50:
+        raise ValueError('--val-percent must be between 1 and 50')
     args.input.mkdir(parents=True, exist_ok=True)
     RAW.mkdir(parents=True, exist_ok=True)
     PROCESSED.mkdir(parents=True, exist_ok=True)
+    remove_leftover_temp_files()
     rows = load_previous()
     previous_ids = set(rows)
     new_ids: list[str] = []
@@ -434,29 +508,18 @@ def main() -> None:
                 print(f'FAILED [web] {url}: {exc}')
             time.sleep(0.2)
     ordered = [rows[k] for k in sorted(rows)]
-    write_jsonl(MANIFEST, ordered)
-    NEW_IDS.write_text(json.dumps(sorted(new_ids), indent=2), encoding='utf-8')
-    STATE.write_text(
-        json.dumps(
-            {
-                'known_ids': sorted(rows),
-                'last_new_count': len(new_ids),
-                'schema_version': 2,
-            },
-            indent=2,
-        ),
-        encoding='utf-8',
+    # The manifest is written last. Until then a power cut leaves the old one in
+    # place, so a rerun finds the same new sources and builds the same files.
+    meta = write_training_binaries(
+        ordered, new_ids, args.reuse_tokenizer, args.vocab_size, args.val_percent
     )
-    CORPUS.write_text(
+    chunk_count = build_chunks(ordered, args.chunk_chars, args.overlap)
+    atomic_write_text(
+        CORPUS,
         '\n\n'.join(
             f"===== SOURCE: {r['label']} =====\n{r['text']}" for r in ordered
         ),
-        encoding='utf-8',
     )
-    chunk_count = build_chunks(ordered, args.chunk_chars, args.overlap)
-    if not 1 <= args.val_percent <= 50:
-        raise ValueError('--val-percent must be between 1 and 50')
-    meta = write_training_binaries(ordered, args.reuse_tokenizer, args.vocab_size, args.val_percent)
     stats.update(
         {
             'sources_total': len(ordered),
@@ -466,7 +529,20 @@ def main() -> None:
             'schema_version': 2,
         }
     )
-    STATS.write_text(json.dumps(stats, indent=2), encoding='utf-8')
+    atomic_write_text(STATS, json.dumps(stats, indent=2))
+    atomic_write_text(NEW_IDS, json.dumps(sorted(new_ids), indent=2))
+    atomic_write_text(
+        STATE,
+        json.dumps(
+            {
+                'known_ids': sorted(rows),
+                'last_new_count': len(new_ids),
+                'schema_version': 2,
+            },
+            indent=2,
+        ),
+    )
+    write_jsonl(MANIFEST, ordered)
     print('\n=== DATA ENGINE COMPLETE ===')
     print(json.dumps(stats, indent=2))
     print(json.dumps(meta, indent=2))

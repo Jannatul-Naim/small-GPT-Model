@@ -38,9 +38,33 @@ def sha(p):
     return h.hexdigest()
 
 
-def load_bin(name):
+def check_build(data_dir):
+    """Stop if an interrupted data build left a mix of old and new files."""
+    meta_path = data_dir / "meta.json"
+
+    if not meta_path.exists():
+        return
+
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+
+    for key, name in (
+        ("tokenizer_sha256", "vocab.json"),
+        ("train_sha256", "train.bin"),
+        ("val_sha256", "val.bin"),
+        ("new_sha256", "new.bin"),
+        ("replay_sha256", "replay.bin"),
+        ("split_sha256", "split.json"),
+    ):
+        if key in meta and sha(data_dir / name) != meta[key]:
+            raise SystemExit(
+                f"{name} does not match meta.json, so a data build was "
+                "probably interrupted. Rerun the build to finish it."
+            )
+
+
+def load_bin(data_dir, name):
     """Load a binary token dataset as a memory-mapped array."""
-    p = DATA / name
+    p = data_dir / name
 
     if not p.exists():
         raise FileNotFoundError(p)
@@ -249,9 +273,22 @@ def main():
         action="store_true",
         help="Allow --mode new to replace existing checkpoints",
     )
+    ap.add_argument(
+        "--data-dir",
+        type=Path,
+        default=DATA,
+        help="Directory holding train.bin, val.bin, and vocab.json",
+    )
+    ap.add_argument(
+        "--eval-interval",
+        type=int,
+        default=config.eval_interval,
+        help="Steps between validation runs and checkpoint saves",
+    )
 
     args = ap.parse_args()
 
+    data_dir = args.data_dir
     ckpt_path = args.checkpoint_dir / CKPT.name
     best_path = args.checkpoint_dir / BEST.name
 
@@ -284,15 +321,17 @@ def main():
 
     # Verify the prepared dataset
     if (
-        not (DATA / "train.bin").exists()
-        or not (DATA / "val.bin").exists()
-        or not (DATA / "vocab.json").exists()
+        not (data_dir / "train.bin").exists()
+        or not (data_dir / "val.bin").exists()
+        or not (data_dir / "vocab.json").exists()
     ):
         raise FileNotFoundError("Prepare data first.")
 
-    tok = BPETokenizer.load(DATA / "vocab.json")
-    tokhash = sha(DATA / "vocab.json")
-    val = load_bin("val.bin")
+    check_build(data_dir)
+
+    tok = BPETokenizer.load(data_dir / "vocab.json")
+    tokhash = sha(data_dir / "vocab.json")
+    val = load_bin(data_dir, "val.bin")
 
     cfg = dict(config.CONFIGS[config.MODEL_SIZE])
     cfg["vocab_size"] = tok.vocab_size
@@ -363,7 +402,7 @@ def main():
 
     # Continue training the best checkpoint with new data and replay data
     else:
-        meta = json.loads((DATA / "meta.json").read_text(encoding="utf-8"))
+        meta = json.loads((data_dir / "meta.json").read_text(encoding="utf-8"))
 
         if not meta.get("new_sources"):
             raise SystemExit(
@@ -405,8 +444,8 @@ def main():
         print(f"Base validation loss: {best:.4f}")
 
     if run["mode"] == "update":
-        new = load_bin("new.bin")
-        replay = load_bin("replay.bin")
+        new = load_bin(data_dir, "new.bin")
+        replay = load_bin(data_dir, "replay.bin")
 
         print(
             f"Continual update: new={len(new):,} "
@@ -414,7 +453,7 @@ def main():
             f"replay ratio={config.replay_ratio}"
         )
     else:
-        train = load_bin("train.bin")
+        train = load_bin(data_dir, "train.bin")
 
     # Configure the model and training loop
     model.gradient_checkpointing = config.gradient_checkpointing
@@ -492,7 +531,7 @@ def main():
 
         # Periodically evaluate and save checkpoints
         if (
-            (step + 1) % config.eval_interval == 0
+            (step + 1) % args.eval_interval == 0
             or step == start + steps - 1
         ):
             v = evaluate(model, val, cfg, device)

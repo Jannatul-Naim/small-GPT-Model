@@ -119,6 +119,9 @@ To fetch the permitted URLs from `data/links.txt`, omit `--no-web`:
 python -m dataset.engine --input data/ingest
 ```
 
+If the power goes during a build, rerun the same command. It keeps finished work
+and leaves no partial files; see `dataset/README.md`.
+
 Inspect these outputs before training:
 
 ```text
@@ -258,10 +261,10 @@ report every run or the mean and spread; do not report only the best run.
 ### 7. Optional retrieval comparison
 
 The local retrieval index uses lexical matching over `data/raw/chunks.jsonl`.
-Start the web interface with:
+Start the web interface with your checkpoint, its tokenizer, and those chunks:
 
 ```bash
-python -m web.server
+python -m web.server --checkpoint checkpoints/gpt-best.pt --data-dir data/processed --chunks data/raw/chunks.jsonl
 ```
 
 Then visit `http://127.0.0.1:8000`. To study retrieval, compare model-only
@@ -269,6 +272,41 @@ answers with retrieval-assisted answers on the same held-out questions. Record
 the retrieved source IDs and whether the answer is supported by them. Retrieval
 can expose current source text to an answer flow, but it does not change model
 weights or establish that the model learned that information.
+
+## Train on a large text file
+
+`dataset.engine` keeps everything in memory, so it suits small corpora. For
+multi-gigabyte text, `dataset.large_text` streams from disk and trains a
+word-level tokenizer. Keep each dataset and its checkpoints in their own folders:
+
+```bash
+python -m dataset.large_text --train path/to/train.txt --val path/to/valid.txt --out data/mydata
+```
+
+```bash
+python -m training.train --mode new --steps 20000 --eval-interval 500 --data-dir data/mydata --checkpoint-dir checkpoints/mydata
+```
+
+Documents in the text files are separated by `<|endoftext|>`, or by whatever you
+pass as `--separator`. If the power goes, rerun the build command, or continue
+training with the same folders:
+
+```bash
+python -m training.train --mode resume --eval-interval 500 --data-dir data/mydata --checkpoint-dir checkpoints/mydata
+```
+
+Pass the same `--data-dir` to `evaluation.py` and `generation.generate`. A
+checkpoint only works with the tokenizer in the folder it was trained from.
+
+To try a model in the web app, pass the same folder and its checkpoint:
+
+```bash
+python -m web.server --checkpoint checkpoints/mydata/gpt-best.pt --data-dir data/mydata
+```
+
+With no options, `python -m web.server` serves the TinyStories run from
+`checkpoints/tinystories-v1/` and `data/tinystories/`, without retrieval. The
+page is written for that model, and it only continues text.
 
 ## Run the tests
 

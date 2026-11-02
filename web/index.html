@@ -9,7 +9,7 @@
         content="#0a0d18"
     >
 
-    <title>Small-GPT | AI Research Assistant</title>
+    <title>Small-GPT</title>
 
     <link
         rel="stylesheet"
@@ -30,7 +30,7 @@
             <div class="workspace-card">
                 <span class="workspace-icon">⌘</span>
                 <div>
-                    <strong>Research Assistant</strong>
+                    <strong>Text Model</strong>
                     <span>Local language model</span>
                 </div>
                 <span class="live-dot"></span>
@@ -39,8 +39,8 @@
             <div class="sidebar-note">
                 <span class="note-icon">✦</span>
                 <p>
-                    Ask questions about your training material.
-                    Retrieval can help ground answers in your sources.
+                    Give it the start of a text and it carries on from there.
+                    It doesn't answer questions or look up facts.
                 </p>
             </div>
 
@@ -60,7 +60,7 @@
 
                 <div class="model-info">
                     <span class="model-indicator"></span>
-                    <span>Small-GPT Research Model</span>
+                    <span id="modelName">Small-GPT</span>
                     <span class="model-tag">LOCAL</span>
                 </div>
 
@@ -83,25 +83,25 @@
                 <div id="welcome" class="welcome">
                     <div class="welcome-icon">✳</div>
 
-                    <span class="eyebrow">YOUR PERSONAL AI</span>
+                    <span class="eyebrow">YOUR LOCAL MODEL</span>
 
-                    <h1>What are we<br><span>exploring today?</span></h1>
+                    <h1>How does your<br><span>story begin?</span></h1>
 
                     <p class="welcome-description">
-                        Ask about your training data, explore concepts,
-                        or investigate a topic with your local model.
+                        Write the first line or two. The model carries on
+                        from there and stops when the story ends.
                     </p>
 
                     <div class="suggestion-grid">
                         <button
                             class="suggestion"
                             type="button"
-                            data-prompt="Explain the main concepts in my training material."
+                            data-prompt="Once upon a time, there was a little girl named Lily. She loved to"
                         >
                             <span class="suggestion-icon">⌘</span>
                             <span>
-                                <strong>Explain a concept</strong>
-                                <small>Break down complex ideas</small>
+                                <strong>A little girl</strong>
+                                <small>Once upon a time...</small>
                             </span>
                             <span class="suggestion-arrow">↗</span>
                         </button>
@@ -109,12 +109,12 @@
                         <button
                             class="suggestion"
                             type="button"
-                            data-prompt="Summarize the most important information in my source material."
+                            data-prompt="Tom and his dog went to the park. They saw a big"
                         >
                             <span class="suggestion-icon">≋</span>
                             <span>
-                                <strong>Summarize sources</strong>
-                                <small>Find the key information</small>
+                                <strong>A day at the park</strong>
+                                <small>Tom and his dog...</small>
                             </span>
                             <span class="suggestion-arrow">↗</span>
                         </button>
@@ -122,12 +122,12 @@
                         <button
                             class="suggestion"
                             type="button"
-                            data-prompt="Teach me a topic step by step, starting with the fundamentals."
+                            data-prompt="The little bird was sad because"
                         >
                             <span class="suggestion-icon">✧</span>
                             <span>
-                                <strong>Learn step by step</strong>
-                                <small>Build understanding gradually</small>
+                                <strong>A sad bird</strong>
+                                <small>The little bird was...</small>
                             </span>
                             <span class="suggestion-arrow">↗</span>
                         </button>
@@ -135,12 +135,12 @@
                         <button
                             class="suggestion"
                             type="button"
-                            data-prompt="What relevant information can you retrieve from my source material?"
+                            data-prompt="Mia wanted to bake a cake for her mom, but"
                         >
                             <span class="suggestion-icon">⌕</span>
                             <span>
-                                <strong>Explore sources</strong>
-                                <small>Search your knowledge base</small>
+                                <strong>Baking a cake</strong>
+                                <small>Mia wanted to...</small>
                             </span>
                             <span class="suggestion-arrow">↗</span>
                         </button>
@@ -157,7 +157,7 @@
                     <textarea
                         id="prompt"
                         rows="1"
-                        placeholder="Ask your Small-GPT anything..."
+                        placeholder="Start a story..."
                         maxlength="12000"
                         required
                     ></textarea>
@@ -180,7 +180,7 @@
                 </form>
 
                 <div class="settings-row">
-                    <label class="setting-control" for="rag">
+                    <label id="ragSetting" class="setting-control" for="rag" hidden>
                         <input
                             id="rag"
                             type="checkbox"
@@ -191,7 +191,7 @@
                         <span class="setting-help" title="Retrieve relevant source chunks before generating an answer.">ⓘ</span>
                     </label>
 
-                    <div class="settings-divider"></div>
+                    <div id="ragDivider" class="settings-divider" hidden></div>
 
                     <label class="compact-setting" for="temperature">
                         <span>Temp</span>
@@ -210,7 +210,7 @@
                         <input
                             id="maxTokens"
                             type="number"
-                            value="180"
+                            value="400"
                             min="1"
                             max="512"
                             step="1"
@@ -241,17 +241,17 @@
 
                     <div class="setting-description">
                         <span>Max new tokens</span>
-                        <span>Limits the length of each answer.</span>
+                        <span>Limits the length of each reply.</span>
                     </div>
 
                     <div class="setting-description">
                         <span>Sampling</span>
-                        <span>Top-k: 40 · Top-p: 0.92</span>
+                        <span>Top-k: 40 · Top-p: 0.92 · Repetition: 1.08</span>
                     </div>
                 </div>
 
                 <p class="disclaimer">
-                    Small-GPT can make mistakes. Verify important information against your sources.
+                    Small-GPT makes up what it writes, so don't rely on it for facts.
                 </p>
             </footer>
         </main>

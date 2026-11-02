@@ -26,6 +26,12 @@ def main():
         default=CKPT,
     )
     ap.add_argument(
+        "--data-dir",
+        type=Path,
+        default=VOCAB.parent,
+        help="Directory holding the checkpoint's vocab.json",
+    )
+    ap.add_argument(
         "--prompt",
         default="Artificial intelligence is",
     )
@@ -72,7 +78,7 @@ def main():
     )
 
     # Load tokenizer and initialize model
-    tok = BPETokenizer.load(VOCAB)
+    tok = BPETokenizer.load(a.data_dir / VOCAB.name)
 
     model = ModernGPT(**ck["config"]).to(device)
     model.load_state_dict(ck["model_state"])
