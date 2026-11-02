@@ -374,3 +374,17 @@ settingsToggle.addEventListener("click", () => {
     settingsToggle.setAttribute("aria-expanded", String(!isExpanded));
     advancedSettings.hidden = isExpanded;
 });
+
+// Show which model is running, and offer retrieval only if it has sources.
+async function loadModelInfo() {
+    const response = await fetch("/health");
+    const info = await response.json();
+
+    document.getElementById("modelName").textContent = info.model;
+
+    const hasSources = info.retrieval_chunks > 0;
+    document.getElementById("ragSetting").hidden = !hasSources;
+    document.getElementById("ragDivider").hidden = !hasSources;
+}
+
+loadModelInfo().catch(console.error);

@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -100,6 +101,20 @@ class TrainingRunTests(unittest.TestCase):
         self.assertTrue((other / "gpt-best.pt").exists())
         self.assertFalse(self.ckpt.exists())
 
+    def test_data_dir_and_eval_interval_are_used(self):
+        other = self.data.parent / "other"
+        shutil.copytree(self.data, other)
+        (other / "train.bin").write_bytes((self.data / "train.bin").read_bytes()[:1000])
+        (self.data / "train.bin").unlink()
+
+        output = self.run_train(
+            "--mode", "new", "--steps", "3",
+            "--data-dir", str(other),
+            "--eval-interval", "1",
+        )
+
+        self.assertEqual(output.count("| val "), 3)
+
     def test_output_reports_training_loss(self):
         self.assertRegex(
             self.run_train("--mode", "new", "--steps", "2"),
@@ -177,6 +192,16 @@ class TrainingRunTests(unittest.TestCase):
             self.run_train("--mode", "update", "--steps", "2")
         self.assertEqual(self.load(self.best)["run"]["mode"], "update")
         self.assertEqual(self.load(self.best)["best_val"], 0.5)
+
+    def test_stops_when_data_files_do_not_match_meta(self):
+        (self.data / "meta.json").write_text(
+            json.dumps({"new_sources": 1, "val_sha256": "0" * 64})
+        )
+
+        with self.assertRaisesRegex(SystemExit, "val.bin does not match"):
+            self.run_train("--mode", "new", "--steps", "2")
+
+        self.assertFalse(self.ckpt.exists())
 
     def test_update_refuses_when_no_new_sources_were_built(self):
         self.run_train("--mode", "new", "--steps", "2")

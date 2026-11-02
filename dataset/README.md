@@ -37,6 +37,17 @@ The engine performs:
 9. `uint16` token binary generation, with an EOS token after each source
 10. provenance/statistics files
 
+## Power cuts
+
+If the power goes during a build, rerun the same command. Nothing is replaced
+until encoding has finished, each file is swapped in whole, and the manifest
+goes last, so the rerun finds the same new sources and builds the same files.
+The trainer and `evaluation.py` stop if they find an unfinished set of files.
+
+Finished work is kept in `data/processed/token_cache/`, so a rerun only encodes
+what is left, and later builds only encode new or changed sources. The folder is
+safe to delete; the next build just takes longer.
+
 ## Reuse the tokenizer
 
 After the first build:

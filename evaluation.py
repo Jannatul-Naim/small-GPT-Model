@@ -62,16 +62,22 @@ def main() -> None:
         type=Path,
         help="Optional JSON report path",
     )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=DATA,
+        help="Directory holding val.bin and vocab.json",
+    )
 
     args = parser.parse_args()
 
     if args.batches < 1 or args.batch_size < 1:
         parser.error("--batches and --batch-size must be positive")
 
-    vocab_path = DATA / "vocab.json"
-    val_path = DATA / "val.bin"
-    meta_path = DATA / "meta.json"
-    split_path = DATA / "split.json"
+    vocab_path = args.data_dir / "vocab.json"
+    val_path = args.data_dir / "val.bin"
+    meta_path = args.data_dir / "meta.json"
+    split_path = args.data_dir / "split.json"
 
     for path in (
         args.checkpoint,
@@ -95,8 +101,18 @@ def main() -> None:
 
     if checkpoint.get("tokenizer_sha256") != tokenizer_hash:
         raise ValueError(
-            "Checkpoint tokenizer hash does not match "
-            "data/processed/vocab.json"
+            f"Checkpoint tokenizer hash does not match {vocab_path}"
+        )
+
+    metadata = json.loads(
+        meta_path.read_text(encoding="utf-8")
+    )
+    validation_hash = sha256(val_path)
+
+    if metadata.get("val_sha256", validation_hash) != validation_hash:
+        raise ValueError(
+            "val.bin does not match meta.json, so a data build was "
+            "probably interrupted. Rerun the build to finish it."
         )
 
     tokens = np.memmap(
@@ -175,11 +191,9 @@ def main() -> None:
         "context_length": block,
         "validation_loss_nats_per_token": mean_loss,
         "validation_perplexity": math.exp(mean_loss),
-        "validation_binary_sha256": sha256(val_path),
+        "validation_binary_sha256": validation_hash,
         "tokenizer_sha256": tokenizer_hash,
-        "dataset_metadata": json.loads(
-            meta_path.read_text(encoding="utf-8")
-        ),
+        "dataset_metadata": metadata,
         "split": json.loads(
             split_path.read_text(encoding="utf-8")
         ),

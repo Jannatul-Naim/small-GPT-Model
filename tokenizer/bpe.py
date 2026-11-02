@@ -3,15 +3,28 @@ from __future__ import annotations
 import gc
 import heapq
 import json
+import os
+import re
 from array import array
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
 
 
+# Splits text into words, numbers, punctuation, and spaces. Every character lands
+# in exactly one piece, so joining the pieces gives back the original text.
+WORD_PIECE = re.compile(
+    r" ?[^\W\d_]+| ?\d+| ?(?:[^\w\s]|_)+|\s+(?!\S)|\s+"
+)
+
+
 class BPETokenizer:
     """
     Memory-efficient byte-level BPE tokenizer.
+
+    With word_level=True, merges stay inside one word piece. Training then only
+    needs a count of distinct pieces and encoding can reuse each piece's tokens,
+    so both handle large corpora, and tokens never memorize whole phrases.
 
     Token IDs:
         0   PAD
@@ -30,8 +43,9 @@ class BPETokenizer:
     OFFSET = 4
     BYTE_VOCAB_SIZE = 256
 
-    def __init__(self, vocab=None, merges=None):
+    def __init__(self, vocab=None, merges=None, word_level=False):
         self.vocab = vocab or {}
+        self.word_level = word_level
 
         self.merges = [
             tuple(map(int, x))
@@ -44,6 +58,7 @@ class BPETokenizer:
         }
 
         self._byte_cache: dict[int, bytes] = {}
+        self._piece_cache: dict[str, list[int]] = {}
 
     @property
     def vocab_size(self) -> int:
@@ -472,6 +487,194 @@ class BPETokenizer:
 
         gc.collect()
 
+    def train_words(
+        self,
+        texts: Iterable[str],
+        vocab_size: int = 4096,
+        min_frequency: int = 2,
+        verbose: bool = True,
+    ) -> None:
+        """Train word-level merges from an iterable of documents."""
+
+        if vocab_size < (
+            self.OFFSET
+            + self.BYTE_VOCAB_SIZE
+        ):
+            raise ValueError(
+                "vocab_size must be at least "
+                f"{self.OFFSET + self.BYTE_VOCAB_SIZE}"
+            )
+
+        piece_counts = Counter()
+
+        for text in texts:
+            piece_counts.update(
+                WORD_PIECE.findall(text)
+            )
+
+        if not piece_counts:
+            raise ValueError(
+                "Cannot train tokenizer on empty text"
+            )
+
+        self.word_level = True
+        self.merges = []
+        self.merge_rank = {}
+        self._byte_cache.clear()
+        self._piece_cache.clear()
+
+        words = [
+            [
+                self.OFFSET + b
+                for b in piece.encode("utf-8")
+            ]
+            for piece in piece_counts
+        ]
+
+        frequencies = list(
+            piece_counts.values()
+        )
+
+        pair_counts = Counter()
+        pair_words = defaultdict(set)
+
+        for index, word in enumerate(words):
+            for pair in zip(word, word[1:]):
+                pair_counts[pair] += frequencies[index]
+                pair_words[pair].add(index)
+
+        heap = [
+            (-count, pair)
+            for pair, count in pair_counts.items()
+        ]
+
+        heapq.heapify(heap)
+
+        target_merges = (
+            vocab_size
+            - self.OFFSET
+            - self.BYTE_VOCAB_SIZE
+        )
+
+        while len(self.merges) < target_merges:
+            best_pair = None
+
+            # Heap entries go stale as counts change, so check each one.
+            while heap:
+                neg_count, pair = heapq.heappop(heap)
+
+                if (
+                    pair_counts.get(pair) == -neg_count
+                    and -neg_count >= min_frequency
+                ):
+                    best_pair = pair
+                    break
+
+            if best_pair is None:
+                break
+
+            new_id = (
+                self.OFFSET
+                + self.BYTE_VOCAB_SIZE
+                + len(self.merges)
+            )
+
+            self.merges.append(best_pair)
+            self.merge_rank[best_pair] = len(self.merges) - 1
+
+            changed = set()
+
+            for index in pair_words.pop(best_pair):
+                old = words[index]
+                new = self._merge_pair(old, best_pair, new_id)
+                frequency = frequencies[index]
+
+                for pair in zip(old, old[1:]):
+                    pair_counts[pair] -= frequency
+                    changed.add(pair)
+
+                for pair in zip(new, new[1:]):
+                    pair_counts[pair] += frequency
+                    pair_words[pair].add(index)
+                    changed.add(pair)
+
+                words[index] = new
+
+            changed.discard(best_pair)
+            pair_counts.pop(best_pair, None)
+
+            for pair in changed:
+                count = pair_counts[pair]
+
+                if count > 0:
+                    heapq.heappush(heap, (-count, pair))
+                else:
+                    del pair_counts[pair]
+
+            if verbose and len(self.merges) % 1000 == 0:
+                print(
+                    f"  merge {len(self.merges)}/{target_merges}",
+                    flush=True,
+                )
+
+        self._rebuild_vocab()
+
+    @staticmethod
+    def _merge_pair(
+        tokens: list[int],
+        pair: tuple[int, int],
+        new_id: int,
+    ) -> list[int]:
+        merged = []
+        i = 0
+
+        while i < len(tokens):
+            if tuple(tokens[i:i + 2]) == pair:
+                merged.append(new_id)
+                i += 2
+            else:
+                merged.append(tokens[i])
+                i += 1
+
+        return merged
+
+    def _encode_piece(
+        self,
+        piece: str,
+    ) -> list[int]:
+        """Apply merges to one word piece, lowest rank first."""
+        cached = self._piece_cache.get(piece)
+
+        if cached is not None:
+            return cached
+
+        tokens = [
+            self.OFFSET + b
+            for b in piece.encode("utf-8")
+        ]
+
+        while len(tokens) > 1:
+            ranked = [
+                (self.merge_rank[pair], pair)
+                for pair in zip(tokens, tokens[1:])
+                if pair in self.merge_rank
+            ]
+
+            if not ranked:
+                break
+
+            rank, pair = min(ranked)
+
+            tokens = self._merge_pair(
+                tokens,
+                pair,
+                self.OFFSET + self.BYTE_VOCAB_SIZE + rank,
+            )
+
+        self._piece_cache[piece] = tokens
+
+        return tokens
+
     def _encode_chunk(
         self,
         chunk: str,
@@ -618,6 +821,22 @@ class BPETokenizer:
 
             return []
 
+        if self.word_level:
+            result = [
+                token
+                for piece in WORD_PIECE.findall(text)
+                for token in self._encode_piece(piece)
+            ]
+
+            if add_special_tokens:
+                return [
+                    self.BOS,
+                    *result,
+                    self.EOS,
+                ]
+
+            return result
+
         result = []
 
         total = len(text)
@@ -711,14 +930,29 @@ class BPETokenizer:
             ],
         }
 
-        path.write_text(
-            json.dumps(
-                data,
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ),
-            encoding="utf-8",
+        if self.word_level:
+            data["word_level"] = True
+
+        # Rename into place so a power cut can't leave a partial tokenizer.
+        tmp = path.with_name(
+            f"._tmp_{path.name}"
         )
+
+        with tmp.open(
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write(
+                json.dumps(
+                    data,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            f.flush()
+            os.fsync(f.fileno())
+
+        os.replace(tmp, path)
 
     @classmethod
     def load(
@@ -735,4 +969,5 @@ class BPETokenizer:
         return cls(
             vocab=data["vocab"],
             merges=data["merges"],
+            word_level=data.get("word_level", False),
         )

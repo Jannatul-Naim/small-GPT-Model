@@ -1,4 +1,10 @@
+import contextlib
+import io
+import itertools
+import json
+import os
 import random
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +14,7 @@ import numpy as np
 
 from dataset import engine
 from dataset.engine import (
+    atomic_open,
     canonical_file_id,
     chunk_text,
     known_content_hashes,
@@ -88,7 +95,7 @@ class DataEngineTests(unittest.TestCase):
         rows = [
             {
                 "id": f"file:doc{i}.txt",
-                "text": " ".join(rng.choice(words) for _ in range(1500)),
+                "text": " ".join(rng.choice(words) for _ in range(300)),
             }
             for i in range(6)
         ]
@@ -101,9 +108,8 @@ class DataEngineTests(unittest.TestCase):
                 PROCESSED=processed,
                 VOCAB=processed / "vocab.json",
                 META=processed / "meta.json",
-                NEW_IDS=processed / "new_sources.json",
             ):
-                meta = engine.write_training_binaries(rows, False, 300, 50)
+                meta = engine.write_training_binaries(rows, [], False, 265, 50)
 
             train = np.fromfile(processed / "train.bin", dtype=np.uint16)
             val = np.fromfile(processed / "val.bin", dtype=np.uint16)
@@ -114,6 +120,195 @@ class DataEngineTests(unittest.TestCase):
         self.assertEqual(val[-1], BPETokenizer.EOS)
         self.assertEqual(meta["train_tokens"], len(train))
         self.assertEqual(meta["val_tokens"], len(val))
+
+    def test_failed_write_keeps_the_old_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "data.txt"
+            path.write_text("old", encoding="utf-8")
+
+            with self.assertRaises(RuntimeError):
+                with atomic_open(path) as f:
+                    f.write("new")
+                    raise RuntimeError
+
+            self.assertEqual(path.read_text(encoding="utf-8"), "old")
+            self.assertEqual([p.name for p in Path(tmp).iterdir()], ["data.txt"])
+
+
+class PowerCut(Exception):
+    pass
+
+
+class RebuildSafetyTests(unittest.TestCase):
+    """Run the real build on temporary paths, interrupting it at every write."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+
+        self.base = self.tmp / "base"
+        for i in range(4):
+            self.add_source(self.base, f"doc{i}", i)
+        self.build(self.base)
+
+    def add_source(self, root, name, seed):
+        rng = random.Random(seed)
+        words = ["trust", "family", "memory", "habit", "culture", "routine", "identity"]
+        path = root / "input" / f"{name}.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(" ".join(rng.choice(words) for _ in range(300)), encoding="utf-8")
+
+    def add_new_training_source(self, root):
+        # Choose a name the split sends to training, which an update requires.
+        name = next(
+            f"new{i}" for i in itertools.count()
+            if split_bucket(f"file:new{i}.txt") % 100 >= 30
+        )
+        self.add_source(root, name, 99)
+        return f"file:{name}.txt"
+
+    def build(self, root, *extra):
+        raw = root / "raw"
+        processed = root / "processed"
+        argv = [
+            "engine",
+            "--input", str(root / "input"),
+            "--no-web",
+            "--vocab-size", "265",
+            "--val-percent", "30",
+            *extra,
+        ]
+
+        with (
+            mock.patch.multiple(
+                engine,
+                RAW=raw,
+                PROCESSED=processed,
+                MANIFEST=raw / "sources.jsonl",
+                CHUNKS=raw / "chunks.jsonl",
+                CORPUS=raw / "corpus.txt",
+                NEW_IDS=raw / "new_sources.json",
+                STATE=raw / "state.json",
+                STATS=raw / "stats.json",
+                VOCAB=processed / "vocab.json",
+                META=processed / "meta.json",
+            ),
+            mock.patch("sys.argv", argv),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            engine.main()
+
+    def outputs(self, root):
+        """Return every build output except the cache, which only affects speed."""
+        return {
+            p.relative_to(root).as_posix(): p.read_bytes()
+            for folder in ("raw", "processed")
+            for p in (root / folder).rglob("*")
+            if p.is_file() and "token_cache" not in p.parts
+        }
+
+    def run_with_power_cut(self, root, cut_after, *extra):
+        """Return False if the build finished before the cut was due."""
+        real_replace = os.replace
+        finished = 0
+
+        def replace_until_cut(src, dst):
+            nonlocal finished
+            if finished == cut_after:
+                raise PowerCut
+            finished += 1
+            real_replace(src, dst)
+
+        with mock.patch("os.replace", replace_until_cut):
+            try:
+                self.build(root, *extra)
+            except PowerCut:
+                return True
+        return False
+
+    def test_rerun_after_a_cut_at_any_write_matches_a_clean_build(self):
+        clean = self.tmp / "clean"
+        shutil.copytree(self.base, clean)
+        new_id = self.add_new_training_source(clean)
+        self.build(clean, "--reuse-tokenizer")
+        expected = self.outputs(clean)
+
+        # The new source must survive the cut, or updates would refuse to run.
+        self.assertEqual(json.loads(expected["raw/new_sources.json"]), [new_id])
+        self.assertEqual(json.loads(expected["processed/meta.json"])["new_sources"], 1)
+
+        for cut in itertools.count():
+            root = self.tmp / f"cut{cut}"
+            shutil.copytree(self.base, root)
+            self.add_new_training_source(root)
+
+            if not self.run_with_power_cut(root, cut, "--reuse-tokenizer"):
+                break
+
+            self.build(root, "--reuse-tokenizer")
+            self.assertEqual(self.outputs(root), expected, f"cut after write {cut}")
+            shutil.rmtree(root)
+
+        self.assertGreater(cut, 8)
+
+    def test_old_build_stays_whole_until_encoding_has_finished(self):
+        before = self.outputs(self.base)
+        self.add_new_training_source(self.base)
+
+        # The first write only caches the new source's tokens.
+        self.assertTrue(self.run_with_power_cut(self.base, 1, "--reuse-tokenizer"))
+        self.assertEqual(self.outputs(self.base), before)
+
+    def test_rerun_only_encodes_what_is_left(self):
+        self.add_new_training_source(self.base)
+        real_encode = BPETokenizer.encode
+
+        with mock.patch.object(
+            BPETokenizer, "encode", autospec=True, side_effect=real_encode
+        ) as encode:
+            self.build(self.base, "--reuse-tokenizer")
+
+        self.assertEqual(encode.call_count, 1)
+
+    def test_rerun_does_not_retrain_the_tokenizer(self):
+        root = self.tmp / "fresh"
+        for i in range(4):
+            self.add_source(root, f"doc{i}", i)
+
+        # The first write saves the trained tokenizer to the cache.
+        self.assertTrue(self.run_with_power_cut(root, 1))
+        self.assertFalse((root / "processed" / "vocab.json").exists())
+
+        with mock.patch.object(BPETokenizer, "train", side_effect=AssertionError):
+            self.build(root)
+
+        self.assertEqual(self.outputs(root), self.outputs(self.base))
+
+    def test_leftover_temp_files_are_removed(self):
+        leftovers = [
+            self.base / "raw" / "._tmp_abc",
+            self.base / "processed" / "._tmp_vocab.json",
+        ]
+        cache = self.base / "processed" / "token_cache"
+        leftovers.append(next(p for p in cache.iterdir() if p.is_dir()) / "._tmp_def")
+
+        for path in leftovers:
+            path.write_text("partial", encoding="utf-8")
+
+        self.build(self.base, "--reuse-tokenizer")
+
+        self.assertFalse(any(path.exists() for path in leftovers))
+
+    def test_damaged_manifest_stops_the_build(self):
+        manifest = self.base / "raw" / "sources.jsonl"
+        damaged = manifest.read_bytes()[:-20]
+        manifest.write_bytes(damaged)
+
+        with self.assertRaisesRegex(ValueError, "is damaged"):
+            self.build(self.base, "--reuse-tokenizer")
+
+        self.assertEqual(manifest.read_bytes(), damaged)
 
 
 if __name__ == "__main__":

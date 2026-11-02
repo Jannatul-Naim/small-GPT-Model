@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import argparse
 import json
 import torch
 
@@ -16,8 +17,27 @@ from rag import Retriever
 # Paths and device configuration
 ROOT = Path(__file__).resolve().parents[1]
 
-CKPT = ROOT / config.best_checkpoint_path
-VOCAB = ROOT / "data/processed/vocab.json"
+ap = argparse.ArgumentParser()
+ap.add_argument(
+    "--checkpoint",
+    default="checkpoints/tinystories-v1/gpt-best.pt",
+)
+ap.add_argument(
+    "--data-dir",
+    default="data/tinystories",
+    help="Directory holding the checkpoint's vocab.json",
+)
+ap.add_argument(
+    "--chunks",
+    help="Source chunks for retrieval (default: chunks.jsonl in --data-dir)",
+)
+# Importing this module must not read another program's arguments.
+a = ap.parse_args(None if __name__ == "__main__" else [])
+
+CKPT = ROOT / a.checkpoint
+DATA_DIR = ROOT / a.data_dir
+VOCAB = DATA_DIR / "vocab.json"
+CHUNKS = ROOT / a.chunks if a.chunks else DATA_DIR / "chunks.jsonl"
 WEB = ROOT / "web"
 STATIC_FILES = {"app.js", "style.css"}
 
@@ -40,13 +60,19 @@ checkpoint_step = ck.get("step")
 
 tok = BPETokenizer.load(VOCAB)
 
+if tok.vocab_size != model_config["vocab_size"]:
+    raise SystemExit(
+        f"{VOCAB} has {tok.vocab_size} tokens but {CKPT} expects "
+        f"{model_config['vocab_size']}. Pass the --data-dir it was trained from."
+    )
+
 model = ModernGPT(**model_config).to(device)
 model.load_state_dict(ck["model_state"])
 model.eval()
 
 del ck
 
-retriever = Retriever()
+retriever = Retriever(CHUNKS)
 
 
 # Initialize FastAPI application
@@ -64,6 +90,7 @@ class Req(BaseModel):
     temperature: float = Field(default=0.75, gt=0, le=2)
     top_k: int = Field(default=40, ge=0)
     top_p: float = Field(default=0.92, gt=0, le=1)
+    repetition_penalty: float = Field(default=1.08, gt=0, le=2)
 
 
 # Web interface
@@ -85,6 +112,7 @@ def static_file(name: str):
 def health():
     return {
         "status": "ok",
+        "model": CKPT.parent.name,
         "device": device,
         "parameters": sum(
             p.numel()
@@ -153,19 +181,28 @@ def stream(r: Req):
 
         for step in range(r.max_new_tokens):
             # Run the model on the available context.
+            context = cur[:, -model_config["block_size"]:]
+
             with torch.no_grad():
                 with torch.autocast(
                     "cuda",
                     dtype=torch.float16,
                     enabled=device == "cuda",
                 ):
-                    logits, _ = model(
-                        cur[:, -model_config["block_size"]:]
-                    )
+                    logits, _ = model(context)
 
             logits = logits[:, -1, :] / max(
                 r.temperature,
                 1e-5,
+            )
+
+            # Penalize tokens already present in the context.
+            seen = torch.unique(context)
+            value = logits[:, seen]
+            logits[:, seen] = torch.where(
+                value < 0,
+                value * r.repetition_penalty,
+                value / r.repetition_penalty,
             )
 
             if step < config.min_new_tokens:
