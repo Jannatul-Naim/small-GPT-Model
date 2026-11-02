@@ -16,7 +16,7 @@ import ollama
 
 ROOT = Path(__file__).resolve().parent
 MODEL = "gpt-oss:120b-cloud"
-OUTPUT_DIR = ROOT / "data" / "text"/ "ollama"
+OUTPUT_DIR = ROOT / "data" / "text"
 NUM_PREDICT = 20_000
 
 
@@ -32,26 +32,32 @@ Write a very large, detailed, high-quality educational text about:
 
 "{topic}"
 
-Requirements:
+Explain the topic from basic concepts to advanced ideas. Assume the
+reader is a beginner and explain unfamiliar concepts clearly.
 
-- Explain the topic from basic concepts to advanced concepts.
-- Assume the reader is a beginner.
-- Use clear and natural language.
-- Include definitions and explanations.
-- Include examples where useful.
-- Explain important terminology.
-- Explain how and why things work.
-- Include practical applications.
-- Include advantages and disadvantages when relevant.
-- Include common mistakes and misconceptions.
-- Include important subtopics related to the main topic.
-- Organize the content with clear headings and subheadings.
-- Make the document coherent rather than repeating the same information.
-- Do not mention that you are an AI.
-- Do not discuss this prompt.
-- Produce ONLY the actual educational content.
+Include definitions, explanations, examples, practical applications,
+important terminology, causes and effects, advantages and disadvantages
+where relevant, common misconceptions, and related concepts.
 
-Generate as much useful content as possible.
+Write in natural, coherent paragraphs. Develop each idea fully and
+connect ideas logically. Provide specific examples and useful details.
+Avoid repetition, filler, vague statements, and unnecessary conclusions.
+
+STRICT OUTPUT FORMAT:
+
+Output ONLY plain text.
+Use continuous paragraphs separated by blank lines.
+Do not use titles or headings.
+Do not use subheadings.
+Do not use numbered lists or bullet points.
+Do not use Markdown formatting.
+Do not use tables, HTML, XML, or LaTeX.
+Do not use code blocks.
+Do not include introductory statements about the task.
+Do not mention AI or this prompt.
+Do not include metadata or comments about the generated document.
+
+Generate as much useful, accurate, detailed educational content as possible.
 """
 
     print(f"Generating synthetic text using {model}...")

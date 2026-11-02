@@ -120,6 +120,21 @@ def canonical_file_id(path: Path, root: Path) -> str:
     return f'file:{rel}'
 
 
+def split_bucket(source_id: str) -> int:
+    """Hash a source's base ID so all its versions land on one side of the split."""
+    base_id = source_id.split('#sha256:')[0]
+    return int(hashlib.sha256(base_id.encode()).hexdigest()[:8], 16)
+
+
+def known_content_hashes(rows: dict[str, dict]) -> dict[str, str]:
+    """Map content hashes to source IDs, including rows normalized by older code."""
+    known: dict[str, str] = {}
+    for sid, row in rows.items():
+        known[sha256(normalize_text(row['text']))] = sid
+        known[row['sha256']] = sid
+    return known
+
+
 def load_previous() -> dict[str, dict]:
     rows: dict[str, dict] = {}
     if MANIFEST.exists():
@@ -204,7 +219,7 @@ def write_training_binaries(
         if len(ids) < 769:
             continue
         token_ids_by_source[row['id']] = ids
-        h = int(hashlib.sha256(row['id'].encode()).hexdigest()[:8], 16)
+        h = split_bucket(row['id'])
         if h % 100 < val_percent:
             val.append(ids)
             val_sources.append(row['id'])
@@ -216,7 +231,7 @@ def write_training_binaries(
         for row in rows:
             ids = tok.encode(row['text'])
             if len(ids) >= 769:
-                h = int(hashlib.sha256(row['id'].encode()).hexdigest()[:8], 16)
+                h = split_bucket(row['id'])
                 candidates.append((h, row['id'], ids))
         if len(candidates) >= 2:
             candidates.sort()
@@ -252,11 +267,12 @@ def write_training_binaries(
     from array import array
 
     def write_bin(path: Path, token_lists: list[list[int]]) -> int:
+        # EOS marks each source boundary and is what teaches the model to stop.
         total = 0
         with path.open('wb') as f:
             for ids in token_lists:
-                array('H', ids).tofile(f)
-                total += len(ids)
+                array('H', [*ids, tok.EOS]).tofile(f)
+                total += len(ids) + 1
         return total
 
     train_n = write_bin(PROCESSED / 'train.bin', train)
@@ -275,7 +291,7 @@ def write_training_binaries(
     split_path.write_text(
         json.dumps(
             {
-                'strategy': 'sha256(source_id) mod 100',
+                'strategy': 'sha256(base_source_id) mod 100',
                 'validation_percent': val_percent,
                 'train_source_ids': sorted(train_sources),
                 'validation_source_ids': sorted(val_sources),
@@ -298,9 +314,10 @@ def write_training_binaries(
         'new_sha256': file_sha(PROCESSED / 'new.bin'),
         'replay_sha256': file_sha(PROCESSED / 'replay.bin'),
         'split_sha256': file_sha(split_path),
-        'split_strategy': 'sha256(source_id) mod 100',
+        'split_strategy': 'sha256(base_source_id) mod 100',
         'validation_percent': val_percent,
-        'schema_version': 2,
+        'source_separator': 'EOS',
+        'schema_version': 3,
     }
     META.write_text(json.dumps(meta, indent=2), encoding='utf-8')
     return meta
@@ -350,7 +367,7 @@ def main() -> None:
         'duplicates': 0,
         'changed_sources': 0,
     }
-    content_hash_to_id = {r.get('sha256'): sid for sid, r in rows.items() if r.get('sha256')}
+    content_hash_to_id = known_content_hashes(rows)
 
     def add(source_id: str, label: str, text: str, kind: str) -> bool:
         nonlocal rows

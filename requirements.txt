@@ -1,8 +1,8 @@
-torch
-numpy
-requests
-beautifulsoup4
-fastapi
-uvicorn
-pypdf
-ollama
+torch==2.14.0
+numpy==2.5.2
+requests==2.34.2
+beautifulsoup4==4.15.0
+fastapi==0.141.1
+uvicorn==0.52.4
+pypdf==6.18.0
+ollama==0.6.2

@@ -13,8 +13,10 @@ claim responsibly.
 
 ## What is included
 
-- A roughly 100M-parameter decoder-only Transformer with RMSNorm, RoPE,
-  grouped-query attention, SwiGLU, and tied input/output embeddings.
+- A decoder-only Transformer with RMSNorm, RoPE, grouped-query attention,
+  SwiGLU, and tied input/output embeddings. The default profile has about 16M
+  parameters, and `training/config.py` also keeps a 100M profile for much larger
+  corpora.
 - A source-aware pipeline for local PDF, TXT, and HTML files, with optional
   URLs, normalization, filtering, exact deduplication, chunking, and a BPE
   tokenizer.
@@ -139,29 +141,38 @@ material. Clean and deduplicate those cases yourself.
 This catches setup and data problems without committing to a long run:
 
 ```bash
-python -m training.train --mode new --steps 10
+python -m training.train --mode new --steps 10 --checkpoint-dir checkpoints/smoke
 ```
 
 If it completes, start the planned training run. Save the terminal output and
 the exact command in your experiment notes:
 
 ```bash
-python -m training.train --mode new --steps 5000
+python -m training.train --mode new --steps 1500
 ```
 
-The trainer prints validation loss at intervals and writes checkpoints under
-`checkpoints/`. Watch for training instability or validation loss rising while
-training loss falls. The step count is an example budget, not a guarantee of
-convergence; choose it based on validation results and available compute.
+`--mode new` refuses to replace existing checkpoints. Use `--checkpoint-dir` to
+give a run its own directory, or `--overwrite` if you really want to replace
+them.
+
+The trainer prints training and validation loss at intervals and writes
+checkpoints under `checkpoints/`: `gpt-best.pt` has the lowest validation loss
+and `gpt.pt` has the latest weights. Watch for training instability or
+validation loss rising while training loss falls. The step count is an example
+budget, not a guarantee of convergence; choose it based on validation results
+and available compute.
 
 To continue an interrupted run, use the matching processed data and tokenizer:
 
 ```bash
-python -m training.train --mode resume --steps 1000
+python -m training.train --mode resume
 ```
 
-Resume and update now stop if the loaded checkpoint tokenizer hash differs
-from the current vocabulary. Keep a copy of `vocab.json` with each checkpoint.
+Resume continues the saved learning-rate schedule and runs to the planned final
+step. `--steps` sets how many more steps to run instead; steps past the planned
+end use the minimum learning rate. Resume and update stop if the loaded
+checkpoint tokenizer hash differs from the current vocabulary. Keep a copy of
+`vocab.json` with each checkpoint.
 
 ### 5. Evaluate the checkpoint
 
@@ -196,8 +207,9 @@ python -m generation.generate \
   --max-new-tokens 160
 ```
 
-Generation is qualitative inspection; it does not replace the held-out
-evaluation.
+This uses `gpt-best.pt`, as does the web interface; pass `--checkpoint` to sample
+from another file. Generation is qualitative inspection; it does not replace the
+held-out evaluation.
 
 ### 6. Run a controlled continual-learning experiment
 
@@ -224,13 +236,19 @@ python -m dataset.engine --input data/topics --no-web --reuse-tokenizer
 python -m training.train --mode update --steps 1500
 ```
 
+Update mode starts from `gpt-best.pt` and stops if the last data build found no
+new sources. It scores the starting model on the current validation data and
+only replaces `gpt-best.pt` if the update beats that score; `gpt.pt` always holds
+the latest weights.
+
 The current update mode samples replay batches with the configured probability
 in `training/config.py`; this is a batch-level sampling probability, not a
 guaranteed exact token ratio for a short run. Run the new-only condition by
 setting `replay_ratio = 0.0` for that run, then restore the setting and run
 new-plus-replay from the same original checkpoint. Keep each condition's
-checkpoint and report separate. Do not compare sequentially updated models as
-if each were an independent condition.
+checkpoint and report separate by copying the original `gpt-best.pt` into a
+directory per condition and passing that directory as `--checkpoint-dir`. Do not
+compare sequentially updated models as if each were an independent condition.
 
 Evaluate both old- and new-topic question sets for every condition. Report the
 change from the no-update baseline: new-topic gain and old-topic retention.
@@ -251,6 +269,12 @@ answers with retrieval-assisted answers on the same held-out questions. Record
 the retrieved source IDs and whether the answer is supported by them. Retrieval
 can expose current source text to an answer flow, but it does not change model
 weights or establish that the model learned that information.
+
+## Run the tests
+
+```bash
+python -m unittest discover -s tests
+```
 
 ## What to save for every experiment
 

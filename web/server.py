@@ -3,22 +3,23 @@ from pathlib import Path
 import json
 import torch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from model.modern_gpt import ModernGPT
 from tokenizer.bpe import BPETokenizer
+from training import config
 from rag import Retriever
 
 
 # Paths and device configuration
 ROOT = Path(__file__).resolve().parents[1]
 
-CKPT = ROOT / "checkpoints/gpt.pt"
+CKPT = ROOT / config.best_checkpoint_path
 VOCAB = ROOT / "data/processed/vocab.json"
 WEB = ROOT / "web"
+STATIC_FILES = {"app.js", "style.css"}
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -27,17 +28,23 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 if not CKPT.exists():
     raise FileNotFoundError(CKPT)
 
+# Load on the CPU so the checkpoint's optimizer state never reaches the GPU.
 ck = torch.load(
     CKPT,
-    map_location=device,
+    map_location="cpu",
     weights_only=False,
 )
 
+model_config = ck["config"]
+checkpoint_step = ck.get("step")
+
 tok = BPETokenizer.load(VOCAB)
 
-model = ModernGPT(**ck["config"]).to(device)
+model = ModernGPT(**model_config).to(device)
 model.load_state_dict(ck["model_state"])
 model.eval()
+
+del ck
 
 retriever = Retriever()
 
@@ -48,27 +55,29 @@ app = FastAPI(
     version="3.0",
 )
 
-app.mount(
-    "/static",
-    StaticFiles(directory=WEB),
-    name="static",
-)
-
 
 # Request schema
 class Req(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1)
     use_retrieval: bool = True
-    max_new_tokens: int = 180
-    temperature: float = 0.75
-    top_k: int = 40
-    top_p: float = 0.92
+    max_new_tokens: int = Field(default=180, ge=1, le=512)
+    temperature: float = Field(default=0.75, gt=0, le=2)
+    top_k: int = Field(default=40, ge=0)
+    top_p: float = Field(default=0.92, gt=0, le=1)
 
 
 # Web interface
 @app.get("/")
 def home():
     return FileResponse(WEB / "index.html")
+
+
+@app.get("/static/{name}")
+def static_file(name: str):
+    if name not in STATIC_FILES:
+        raise HTTPException(status_code=404)
+
+    return FileResponse(WEB / name)
 
 
 # Health and model information
@@ -82,7 +91,7 @@ def health():
             for p in model.parameters()
         ),
         "retrieval_chunks": len(retriever.chunks),
-        "checkpoint_step": ck.get("step"),
+        "checkpoint_step": checkpoint_step,
     }
 
 
@@ -134,7 +143,7 @@ def stream(r: Req):
     ids = tok.encode(prompt)
 
     idx = torch.tensor(
-        [ids[-ck["config"]["block_size"]:]],
+        [ids[-model_config["block_size"]:]],
         dtype=torch.long,
         device=device,
     )
@@ -142,7 +151,7 @@ def stream(r: Req):
     def events():
         cur = idx
 
-        for _ in range(min(max(1, r.max_new_tokens), 512)):
+        for step in range(r.max_new_tokens):
             # Run the model on the available context.
             with torch.no_grad():
                 with torch.autocast(
@@ -151,13 +160,16 @@ def stream(r: Req):
                     enabled=device == "cuda",
                 ):
                     logits, _ = model(
-                        cur[:, -ck["config"]["block_size"]:]
+                        cur[:, -model_config["block_size"]:]
                     )
 
             logits = logits[:, -1, :] / max(
                 r.temperature,
                 1e-5,
             )
+
+            if step < config.min_new_tokens:
+                logits[:, tok.EOS] = float("-inf")
 
             # Top-k sampling
             if r.top_k:
@@ -224,3 +236,9 @@ def stream(r: Req):
         events(),
         media_type="text/event-stream",
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)

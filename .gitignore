@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Model weights
+checkpoints/
+
+# Built data
+data/raw/
+data/processed/
+
+# Source text, which may not be licensed for redistribution
+data/ingest/
+data/text/
+data/topics/

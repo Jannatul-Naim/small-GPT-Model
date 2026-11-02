@@ -6,12 +6,13 @@ import torch
 
 from model.modern_gpt import ModernGPT
 from tokenizer.bpe import BPETokenizer
+from training import config
 
 
 # Paths
 ROOT = Path(__file__).resolve().parents[1]
 
-CKPT = ROOT / "checkpoints/gpt.pt"
+CKPT = ROOT / config.best_checkpoint_path
 VOCAB = ROOT / "data/processed/vocab.json"
 
 
@@ -20,6 +21,11 @@ def main():
     ap = argparse.ArgumentParser()
 
     ap.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=CKPT,
+    )
+    ap.add_argument(
         "--prompt",
         default="Artificial intelligence is",
     )
@@ -27,6 +33,11 @@ def main():
         "--max-new-tokens",
         type=int,
         default=200,
+    )
+    ap.add_argument(
+        "--min-new-tokens",
+        type=int,
+        default=config.min_new_tokens,
     )
     ap.add_argument(
         "--temperature",
@@ -55,7 +66,7 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     ck = torch.load(
-        CKPT,
+        a.checkpoint,
         map_location=device,
         weights_only=False,
     )
@@ -84,6 +95,8 @@ def main():
         a.top_k,
         a.top_p,
         a.repetition_penalty,
+        tok.EOS,
+        a.min_new_tokens,
     )
 
     print(tok.decode(out[0].tolist()))

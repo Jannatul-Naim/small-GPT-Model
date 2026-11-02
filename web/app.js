@@ -1,4 +1,3 @@
-
 const form = document.getElementById("form");
 const promptBox = document.getElementById("prompt");
 const chat = document.getElementById("chat");
@@ -13,9 +12,10 @@ const advancedSettings = document.getElementById("advancedSettings");
 
 let isGenerating = false;
 
+// The page scrolls, not the chat element, which grows with its content.
 function scrollToBottom() {
-    chat.scrollTo({
-        top: chat.scrollHeight,
+    window.scrollTo({
+        top: document.documentElement.scrollHeight,
         behavior: "smooth",
     });
 }
