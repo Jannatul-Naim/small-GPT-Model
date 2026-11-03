@@ -285,6 +285,12 @@ def main():
         default=config.eval_interval,
         help="Steps between validation runs and checkpoint saves",
     )
+    ap.add_argument(
+        "--model-size",
+        choices=list(config.CONFIGS),
+        default=config.MODEL_SIZE,
+        help="Model profile for --mode new; other modes use the checkpoint's",
+    )
 
     args = ap.parse_args()
 
@@ -333,7 +339,7 @@ def main():
     tokhash = sha(data_dir / "vocab.json")
     val = load_bin(data_dir, "val.bin")
 
-    cfg = dict(config.CONFIGS[config.MODEL_SIZE])
+    cfg = dict(config.CONFIGS[args.model_size])
     cfg["vocab_size"] = tok.vocab_size
 
     # Initialize a new training run

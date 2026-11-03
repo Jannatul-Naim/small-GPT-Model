@@ -115,6 +115,14 @@ class TrainingRunTests(unittest.TestCase):
 
         self.assertEqual(output.count("| val "), 3)
 
+    def test_model_size_selects_the_profile_and_resume_keeps_it(self):
+        with mock.patch.dict(config.CONFIGS, {"other": {**TINY, "n_layers": 2}}):
+            self.run_train("--mode", "new", "--steps", "4", "--model-size", "other")
+            self.assertEqual(self.load(self.ckpt)["config"]["n_layers"], 2)
+
+        self.run_train("--mode", "resume", "--steps", "1")
+        self.assertEqual(self.load(self.ckpt)["config"]["n_layers"], 2)
+
     def test_output_reports_training_loss(self):
         self.assertRegex(
             self.run_train("--mode", "new", "--steps", "2"),

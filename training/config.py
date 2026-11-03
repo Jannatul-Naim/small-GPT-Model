@@ -14,6 +14,19 @@ CONFIGS = {
         "ffn_dim": 1024,
         "dropout": 0.1,
     },
+    # About 24M parameters with a 4096-token vocabulary. Made for TinyStories
+    # (556M tokens); it would memorize a small corpus. Select it with
+    # --model-size medium.
+    "medium": {
+        "vocab_size": 16384,
+        "block_size": 768,
+        "dim": 512,
+        "n_layers": 8,
+        "n_heads": 8,
+        "n_kv_heads": 2,
+        "ffn_dim": 1365,
+        "dropout": 0.1,
+    },
     # About 100M parameters. It memorized the 1.4M-token training set, so use
     # it only with far more data. It also needs batch_size = 2,
     # gradient_accumulation_steps = 16, and gradient_checkpointing = True.
