@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ap = argparse.ArgumentParser()
 ap.add_argument(
     "--checkpoint",
-    default="checkpoints/tinystories-v1/gpt-best.pt",
+    default="checkpoints/tinystories-v2/gpt-best.pt",
 )
 ap.add_argument(
     "--data-dir",

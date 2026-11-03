@@ -287,6 +287,9 @@ python -m dataset.large_text --train path/to/train.txt --val path/to/valid.txt -
 python -m training.train --mode new --steps 20000 --eval-interval 500 --data-dir data/mydata --checkpoint-dir checkpoints/mydata
 ```
 
+Add `--model-size medium` for a 24M-parameter model, if you have hundreds of
+millions of tokens.
+
 Documents in the text files are separated by `<|endoftext|>`, or by whatever you
 pass as `--separator`. If the power goes, rerun the build command, or continue
 training with the same folders:
@@ -305,7 +308,7 @@ python -m web.server --checkpoint checkpoints/mydata/gpt-best.pt --data-dir data
 ```
 
 With no options, `python -m web.server` serves the TinyStories run from
-`checkpoints/tinystories-v1/` and `data/tinystories/`, without retrieval. The
+`checkpoints/tinystories-v2/` and `data/tinystories/`, without retrieval. The
 page is written for that model, and it only continues text.
 
 ## Run the tests
