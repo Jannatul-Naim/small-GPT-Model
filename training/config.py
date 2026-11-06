@@ -27,6 +27,19 @@ CONFIGS = {
         "ffn_dim": 1365,
         "dropout": 0.1,
     },
+    # About 185M parameters with an 8192-token vocabulary, using about 9.6 GiB
+    # of GPU memory in training. Made for a billion tokens of stories. Select
+    # it with --model-size large.
+    "large": {
+        "vocab_size": 16384,
+        "block_size": 768,
+        "dim": 1024,
+        "n_layers": 16,
+        "n_heads": 16,
+        "n_kv_heads": 4,
+        "ffn_dim": 2730,
+        "dropout": 0.1,
+    },
     # About 100M parameters. It memorized the 1.4M-token training set, so use
     # it only with far more data. It also needs batch_size = 2,
     # gradient_accumulation_steps = 16, and gradient_checkpointing = True.

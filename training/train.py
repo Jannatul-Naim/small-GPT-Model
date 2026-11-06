@@ -542,11 +542,13 @@ def main():
         ):
             v = evaluate(model, val, cfg, device)
 
+            # Flush so that a log written through tee survives a power cut.
             print(
                 f"step {step:6d} | "
                 f"train {train_loss / train_steps:.4f} | "
                 f"val {v:.4f} | "
-                f"lr {current_lr:.2e}"
+                f"lr {current_lr:.2e}",
+                flush=True,
             )
 
             train_loss = 0.0
@@ -560,7 +562,7 @@ def main():
                     best_path,
                 )
 
-                print("best checkpoint saved")
+                print("best checkpoint saved", flush=True)
 
             atomic(
                 payload(model, opt, step, best, cfg, tokhash, run),
