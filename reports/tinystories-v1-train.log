@@ -1,0 +1,86 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 3060
+VRAM: 11.62 GiB
+Parameters: 11,015,040
+Context: 768 | effective tokens/step: 24576
+step    499 | train 3.8600 | val 2.4890 | lr 3.00e-04
+best checkpoint saved
+step    999 | train 2.2780 | val 2.0110 | lr 2.99e-04
+best checkpoint saved
+step   1499 | train 1.9686 | val 1.8127 | lr 2.97e-04
+best checkpoint saved
+step   1999 | train 1.8257 | val 1.7084 | lr 2.94e-04
+best checkpoint saved
+step   2499 | train 1.7452 | val 1.6466 | lr 2.91e-04
+best checkpoint saved
+step   2999 | train 1.6832 | val 1.6003 | lr 2.87e-04
+best checkpoint saved
+step   3499 | train 1.6430 | val 1.5645 | lr 2.81e-04
+best checkpoint saved
+step   3999 | train 1.6110 | val 1.5318 | lr 2.76e-04
+best checkpoint saved
+step   4499 | train 1.5817 | val 1.5115 | lr 2.69e-04
+best checkpoint saved
+step   4999 | train 1.5623 | val 1.4929 | lr 2.62e-04
+best checkpoint saved
+step   5499 | train 1.5419 | val 1.4723 | lr 2.54e-04
+best checkpoint saved
+step   5999 | train 1.5221 | val 1.4581 | lr 2.46e-04
+best checkpoint saved
+step   6499 | train 1.5103 | val 1.4433 | lr 2.37e-04
+best checkpoint saved
+step   6999 | train 1.4926 | val 1.4317 | lr 2.28e-04
+best checkpoint saved
+step   7499 | train 1.4815 | val 1.4203 | lr 2.19e-04
+best checkpoint saved
+step   7999 | train 1.4691 | val 1.4091 | lr 2.09e-04
+best checkpoint saved
+step   8499 | train 1.4615 | val 1.3981 | lr 1.98e-04
+best checkpoint saved
+step   8999 | train 1.4528 | val 1.3885 | lr 1.88e-04
+best checkpoint saved
+step   9499 | train 1.4410 | val 1.3789 | lr 1.77e-04
+best checkpoint saved
+step   9999 | train 1.4327 | val 1.3711 | lr 1.67e-04
+best checkpoint saved
+step  10499 | train 1.4227 | val 1.3633 | lr 1.56e-04
+best checkpoint saved
+step  10999 | train 1.4184 | val 1.3561 | lr 1.45e-04
+best checkpoint saved
+step  11499 | train 1.4091 | val 1.3507 | lr 1.35e-04
+best checkpoint saved
+step  11999 | train 1.4043 | val 1.3439 | lr 1.25e-04
+best checkpoint saved
+step  12499 | train 1.3962 | val 1.3375 | lr 1.14e-04
+best checkpoint saved
+step  12999 | train 1.3907 | val 1.3305 | lr 1.05e-04
+best checkpoint saved
+step  13499 | train 1.3863 | val 1.3270 | lr 9.54e-05
+best checkpoint saved
+step  13999 | train 1.3804 | val 1.3216 | lr 8.64e-05
+best checkpoint saved
+step  14499 | train 1.3756 | val 1.3189 | lr 7.80e-05
+best checkpoint saved
+step  14999 | train 1.3734 | val 1.3141 | lr 7.01e-05
+best checkpoint saved
+step  15499 | train 1.3660 | val 1.3087 | lr 6.28e-05
+best checkpoint saved
+step  15999 | train 1.3630 | val 1.3026 | lr 5.62e-05
+best checkpoint saved
+step  16499 | train 1.3575 | val 1.3006 | lr 5.02e-05
+best checkpoint saved
+step  16999 | train 1.3553 | val 1.2975 | lr 4.49e-05
+best checkpoint saved
+step  17499 | train 1.3524 | val 1.2948 | lr 4.04e-05
+best checkpoint saved
+step  17999 | train 1.3486 | val 1.2923 | lr 3.67e-05
+best checkpoint saved
+step  18499 | train 1.3478 | val 1.2908 | lr 3.38e-05
+best checkpoint saved
+step  18999 | train 1.3450 | val 1.2897 | lr 3.17e-05
+best checkpoint saved
+step  19499 | train 1.3439 | val 1.2877 | lr 3.04e-05
+best checkpoint saved
+step  19999 | train 1.3449 | val 1.2858 | lr 3.00e-05
+best checkpoint saved
+Training complete: checkpoints/tinystories-v1/gpt.pt

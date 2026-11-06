@@ -1,0 +1,49 @@
+Training tokenizer...
+  merge 1000/3836
+  merge 2000/3836
+  merge 3000/3836
+Tokenizer: 4,096 tokens
+train.bin: 100,000 documents
+train.bin: 200,000 documents
+train.bin: 300,000 documents
+train.bin: 400,000 documents
+train.bin: 500,000 documents
+train.bin: 600,000 documents
+train.bin: 700,000 documents
+train.bin: 800,000 documents
+train.bin: 900,000 documents
+train.bin: 1,000,000 documents
+train.bin: 1,100,000 documents
+train.bin: 1,200,000 documents
+train.bin: 1,300,000 documents
+train.bin: 1,400,000 documents
+train.bin: 1,500,000 documents
+train.bin: 1,600,000 documents
+train.bin: 1,700,000 documents
+train.bin: 1,800,000 documents
+train.bin: 1,900,000 documents
+train.bin: 2,000,000 documents
+train.bin: 2,100,000 documents
+train.bin: 2,200,000 documents
+train.bin: 2,300,000 documents
+train.bin: 2,400,000 documents
+train.bin: 2,500,000 documents
+train.bin: 2,600,000 documents
+train.bin: 2,700,000 documents
+{
+  "vocab_size": 4096,
+  "sources": 2745125,
+  "new_sources": 0,
+  "train_documents": 2717495,
+  "val_documents": 27630,
+  "train_tokens": 556390617,
+  "val_tokens": 5617373,
+  "tokenizer_sha256": "559ba9958ba31e6493e6e9253a0156d0d60cac94f42f5af445d91b7010ccfb8d",
+  "train_sha256": "d3429c7c4900b9c76f14dbff0c473ddb8b0e35138cf3f89e8502c38276ccb08b",
+  "val_sha256": "ba8596e36afa3bf3528136354893d2f5b12f63f086e030c8295dcac58207ca4e",
+  "split_sha256": "3715e6530164349f3225043b96f9e27872d4b130369d6ad87ef44d3169b52784",
+  "split_strategy": "separate files",
+  "source_separator": "EOS",
+  "schema_version": 3
+}
+build: 197.10 s, peak memory 139524 KB

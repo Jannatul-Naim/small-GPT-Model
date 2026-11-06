@@ -1,0 +1,37 @@
+{
+  "evaluated_at_utc": "2026-11-02T15:35:46.410496+00:00",
+  "checkpoint": "/home/naim/Projects/LLM/small-GPT-Model/checkpoints/tinystories-v1/gpt-best.pt",
+  "checkpoint_step": 19999,
+  "device": "cuda",
+  "seed": 2026,
+  "batches": 100,
+  "batch_size": 2,
+  "context_length": 768,
+  "validation_loss_nats_per_token": 1.2880835902690888,
+  "validation_perplexity": 3.625831314921313,
+  "validation_binary_sha256": "ba8596e36afa3bf3528136354893d2f5b12f63f086e030c8295dcac58207ca4e",
+  "tokenizer_sha256": "559ba9958ba31e6493e6e9253a0156d0d60cac94f42f5af445d91b7010ccfb8d",
+  "dataset_metadata": {
+    "vocab_size": 4096,
+    "sources": 2745125,
+    "new_sources": 0,
+    "train_documents": 2717495,
+    "val_documents": 27630,
+    "train_tokens": 556390617,
+    "val_tokens": 5617373,
+    "tokenizer_sha256": "559ba9958ba31e6493e6e9253a0156d0d60cac94f42f5af445d91b7010ccfb8d",
+    "train_sha256": "d3429c7c4900b9c76f14dbff0c473ddb8b0e35138cf3f89e8502c38276ccb08b",
+    "val_sha256": "ba8596e36afa3bf3528136354893d2f5b12f63f086e030c8295dcac58207ca4e",
+    "split_sha256": "3715e6530164349f3225043b96f9e27872d4b130369d6ad87ef44d3169b52784",
+    "split_strategy": "separate files",
+    "source_separator": "EOS",
+    "schema_version": 3
+  },
+  "split": {
+    "strategy": "separate files",
+    "train_file": "TinyStoriesV2-GPT4-train.txt",
+    "train_file_sha256": "6418d412de72888f52b5142c761ac21a582f7d1166f0bfbdb5f03ccfdec90443",
+    "validation_file": "TinyStoriesV2-GPT4-valid.txt",
+    "validation_file_sha256": "6874bae9a4c1a4e7edcf0e53b86c17817e9cf881fc75ff2368da457b80c0585d"
+  }
+}

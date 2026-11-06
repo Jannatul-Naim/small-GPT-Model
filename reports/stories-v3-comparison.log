@@ -1,0 +1,49 @@
+train tokens 1,147,643,766 | val tokens 11,590,840 | vocab 8192 | val chars/token 4.18
+EOS in train 4,833,164 | EOS in val 49,001
+vocab never in train 115 | median token frequency 12,273
+tokens spanning 2+ words: 0
+bigram baseline val loss: 4.3002 | perplexity 73.7
+
+=== best: step 92499, 184,550,400 params, 6.2 train tokens per param ===
+train 1.1286 | val (2000 windows) 1.1623 | val (full pass) 1.1702 | perplexity 3.2 | gap 0.0337 | bits/char 0.403
+
+[best] PROMPT: Once upon a time, there was a little girl named Lily. She loved to
+Once upon a time, there was a little girl named Lily. She loved to play with her toys and eat yummy snacks. One day, Lily saw a big jar of cookies on the table. Her mommy said, "Lily, if you finish your lunch, you can have a cookie."
+Lily ate all her lunch very fast. She wanted the cookie so much. But when she went back to the table, the jar was empty! Lily was sad. She asked her mommy, "Where is my cookie?"
+Her mommy smiled and said, "I put it in the cupboard, but I forgot about it." Lily was happy to find the cookie. She took a bite and it tasted even better than before. From that day on, Lily always finished her food before having a cookie.
+-- generated 144 tokens | stopped at EOS: True
+
+[best] PROMPT: Tom and his dog went to the park. They saw a big
+Tom and his dog went to the park. They saw a big tree with a hole in it. Tom said, "Let's enter the tree!" So, they went inside the tree. Inside the tree, it was very dark and scary.
+Then, they heard a loud noise. It was a big bird! The bird said, "This is my home. You can't be here." Tom and his dog were sad. They tried to leave, but they couldn't. The bird chased them out of the tree. They ran home and never went back to the scary tree again.
+-- generated 110 tokens | stopped at EOS: True
+
+[best] PROMPT: The little bird was sad because
+The little bird was sad because it could not get back to its nest. It tried and tried, but it just could not do it. The little bird's friends saw the sad bird and wanted to help. They all worked together to make a new nest for the bird.
+In the end, the little bird had a new nest in the big tree. It was even better than the old nest. The little bird was very happy and thanked its friends. The moral of the story is that when we help each other, we can make things better for everyone.
+-- generated 109 tokens | stopped at EOS: True
+
+[best] PROMPT: One day, a boy found a red ball in the garden.
+One day, a boy found a red ball in the garden. He liked the ball very much. He played with it all day. He threw it high and far. The ball went up and down. The boy was happy.
+The boy saw his friend, a girl, in the garden. She was sad. The boy asked, "Why are you sad?" The girl said, "I lost my ball." The boy showed her the red ball. The girl smiled. She said, "That's my ball! Thank you!"
+The boy and the girl played together. They laughed and had fun. But then, the ball rolled away. It went into the street. The boy and the girl ran after the ball. They did not see the big car coming. The car hit the ball. The ball popped. The boy and the girl were sad. The red ball was gone.
+-- generated 169 tokens | stopped at EOS: True
+
+[best] PROMPT: Mia wanted to bake a cake for her mom, but
+Mia wanted to bake a cake for her mom, but she did not know how to make it. She felt helpless and sad. Mia asked her big brother, Tom, for help. Tom was nice and said he would teach her.
+Tom showed Mia how to make the cake. They mixed the flour, sugar, and eggs together. Then, they put the cake in the oven to bake. Mia and Tom waited and talked. When the cake was done, they took it out of the oven. Mia was happy and thanked Tom for his help. They ate the yummy cake together and had a fun day.
+-- generated 113 tokens | stopped at EOS: True
+
+[best] PROMPT: What is the capital of France?
+What is the capital of France? What is your favorite food?" he asks.
+Lily and Ben look at each other. They do not know what to say. They have never done this before. They are afraid.
+Then, they see a man walking by. He has a big smile and a red hat. He looks friendly.
+"Hello, kids," he says. "Do you like my cap case?"
+"Yes, we do!" Lily and Ben say together. "But we do not know what it is."
+The man laughs. "This is my cap case. I wear it every day. It keeps my things from getting lost or broken. Do you want to see?"
+Lily and Ben nod. They are curious. The man opens his cap case and takes out some papers and photos. He shows them to Lily and Ben.
+"These are my pictures," he says. "I have many colors and shapes. I also have a cat and a dog and a bird. Do you like them?"
+Lily and Ben look at the pictures. They see the cat and the dog and the
+-- generated 220 tokens | stopped at EOS: False
+
+[best] share of generated 16-token runs found in the training text: 6.7%

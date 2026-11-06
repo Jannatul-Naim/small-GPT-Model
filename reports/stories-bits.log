@@ -1,0 +1,8 @@
+
+=== v2: step 44999, block 768, vocab 4096 ===
+v2 on TinyStories valid: docs 27,630 | tokens 5,617,373 | chars 22,067,904 (decoded 22,067,904) | chars/token 3.929 | nats/token 1.1098 | perplexity 3.03 | bits/char 0.4076
+v2 on SimpleStories test: docs 21,371 | tokens 7,042,723 | chars 26,430,797 (decoded 26,430,797) | chars/token 3.753 | nats/token 2.7071 | perplexity 14.99 | bits/char 1.0407
+
+=== v3: step 92499, block 768, vocab 8192 ===
+v3 on TinyStories valid: docs 27,630 | tokens 5,478,455 | chars 22,067,904 (decoded 22,067,904) | chars/token 4.028 | nats/token 0.9728 | perplexity 2.65 | bits/char 0.3484
+v3 on SimpleStories test: docs 21,371 | tokens 6,112,385 | chars 26,430,797 (decoded 26,430,797) | chars/token 4.324 | nats/token 1.3472 | perplexity 3.85 | bits/char 0.4495

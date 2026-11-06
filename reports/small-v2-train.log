@@ -1,0 +1,53 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 3060
+VRAM: 11.62 GiB
+Parameters: 15,733,632
+Context: 768 | effective tokens/step: 24576
+step     99 | train 9.3346 | val 8.9495 | lr 2.00e-04
+best checkpoint saved
+step    199 | train 8.8375 | val 8.4687 | lr 3.00e-04
+best checkpoint saved
+step    299 | train 7.8922 | val 7.4945 | lr 2.98e-04
+best checkpoint saved
+step    399 | train 7.0539 | val 6.9081 | lr 2.95e-04
+best checkpoint saved
+step    499 | train 6.5067 | val 6.5064 | lr 2.90e-04
+best checkpoint saved
+step    599 | train 6.0933 | val 6.2176 | lr 2.84e-04
+best checkpoint saved
+step    699 | train 5.7627 | val 6.0020 | lr 2.76e-04
+best checkpoint saved
+step    799 | train 5.4858 | val 5.8410 | lr 2.67e-04
+best checkpoint saved
+step    899 | train 5.2499 | val 5.7234 | lr 2.57e-04
+best checkpoint saved
+step    999 | train 5.0375 | val 5.6283 | lr 2.45e-04
+best checkpoint saved
+step   1099 | train 4.8470 | val 5.5644 | lr 2.33e-04
+best checkpoint saved
+step   1199 | train 4.6779 | val 5.5181 | lr 2.19e-04
+best checkpoint saved
+step   1299 | train 4.5379 | val 5.4825 | lr 2.05e-04
+best checkpoint saved
+step   1399 | train 4.4013 | val 5.4542 | lr 1.91e-04
+best checkpoint saved
+step   1499 | train 4.2783 | val 5.4429 | lr 1.76e-04
+best checkpoint saved
+step   1599 | train 4.1619 | val 5.4360 | lr 1.61e-04
+best checkpoint saved
+step   1699 | train 4.0630 | val 5.4289 | lr 1.47e-04
+best checkpoint saved
+step   1799 | train 3.9666 | val 5.4342 | lr 1.32e-04
+step   1899 | train 3.8898 | val 5.4403 | lr 1.18e-04
+step   1999 | train 3.8159 | val 5.4424 | lr 1.04e-04
+step   2099 | train 3.7569 | val 5.4482 | lr 9.13e-05
+step   2199 | train 3.6883 | val 5.4592 | lr 7.93e-05
+step   2299 | train 3.6429 | val 5.4660 | lr 6.83e-05
+step   2399 | train 3.5935 | val 5.4697 | lr 5.86e-05
+step   2499 | train 3.5548 | val 5.4756 | lr 5.01e-05
+step   2599 | train 3.5266 | val 5.4800 | lr 4.30e-05
+step   2699 | train 3.4962 | val 5.4852 | lr 3.74e-05
+step   2799 | train 3.4679 | val 5.4905 | lr 3.33e-05
+step   2899 | train 3.4541 | val 5.4962 | lr 3.08e-05
+step   2999 | train 3.4290 | val 5.5020 | lr 3.00e-05
+Training complete: checkpoints/small-v2/gpt.pt

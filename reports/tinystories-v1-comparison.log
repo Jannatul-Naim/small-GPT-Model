@@ -1,0 +1,87 @@
+train tokens 556,390,617 | val tokens 5,617,373 | vocab 4096 | val chars/token 3.93
+EOS in train 2,717,495 | EOS in val 27,630
+vocab never in train 85 | median token frequency 18,605
+tokens spanning 2+ words: 0
+bigram baseline val loss: 3.9821 | perplexity 53.6
+
+=== best: step 19999, 11,015,040 params, 50.5 train tokens per param ===
+train 1.2797 | val (200 windows) 1.2881 | val (full pass) 1.2821 | perplexity 3.6 | gap 0.0084 | bits/char 0.471
+
+[best] PROMPT: Once upon a time, there was a little girl named Lily. She loved to
+Once upon a time, there was a little girl named Lily. She loved to play with her toys and eat yummy food. One day, Lily found an unusual toy in her room. It was a small, round ball.
+Lily played with the ball all day. She threw it, kicked it, and even jumped on it. The ball made her very happy. But then, something unexpected happened. The ball popped! Lily was sad because she loved the ball so much.
+Lily's mom saw her sad face and had an idea. She took the unusual toy out of the box and gave it back to Lily. Lily was so happy to have her ball back. From that day on, Lily and the unusual toy became best friends. They played together every day and shared many more fun adventures.
+-- generated 148 tokens | stopped at EOS: True
+
+[best] PROMPT: Tom and his dog went to the park. They saw a big
+Tom and his dog went to the park. They saw a big tree with a hole in it. The dog looked inside and saw a small, soft thing. It was a pill!
+Tom and his dog did not know what the pill was for. They wanted to show it to their friends. Tom said, "Look, dog! I found a pill!" But the dog did not understand. He barked and wagged his tail. Tom's mom saw that he was serious. She knew what the pill was for.
+Mom put the pill on Tom's hand. She told Tom, "Be careful, Tom. That pill is very hot." Tom felt better. He smiled at the dog and said, "Thank you, Mom." Then, they went home to tell dad about the pill.
+-- generated 150 tokens | stopped at EOS: True
+
+[best] PROMPT: The little bird was sad because
+The little bird was sad because it did not know how to get back home. It asked its friends for help. The friends were very good at helping the little bird.
+The little bird found a big tree and tried to climb it. It climbed up and started to fly. It was so happy when it reached the top. But then, something unexpected happened. The little bird fell down and landed on the soft grass. The little bird could not fly anymore.
+The friends learned that even if you are small, you can still be strong and helpful. They also learned that even when you are small or small, you can still do great things. And they all lived happily ever after.
+-- generated 134 tokens | stopped at EOS: True
+
+[best] PROMPT: One day, a boy found a red ball in the garden.
+One day, a boy found a red ball in the garden. He was very happy and wanted to play with it. He picked up the ball and started to throw it high into the sky.
+The boy saw a big bird sitting on a tree. The bird looked at the boy and said, "That is my ball! You can't play with it." The boy felt sad but he didn't give up. He kept playing with the red ball.
+Then, something unexpected happened. The big bird took the red ball and flew away. The boy was very surprised. He thought the bird would never come back. But then, the bird came back and gave the red ball back to the boy. They both laughed and became friends.
+-- generated 139 tokens | stopped at EOS: True
+
+[best] PROMPT: Mia wanted to bake a cake for her mom, but
+Mia wanted to bake a cake for her mom, but she did not know how. She looked at the stove and saw a big stove. Mia thought maybe if she put the cake in the oven, it would make the cake taste better.
+Mia put the cake in the oven and waited. The cake started to bake! Mia was so happy. But then, something unexpected happened. The cake turned into a giant cake! Mia was surprised, but she liked the giant cake. She ate the giant cake and it was so yummy. And that's how Mia made a new friend, the giant cake.
+-- generated 112 tokens | stopped at EOS: True
+
+[best] PROMPT: What is the capital of France?
+What is the capital of France? What did you do?"
+The sailor answered, "I wanted to see the captain. I thought he was special. He said he liked it very much."
+The sailor smiled and said, "That's true. You are very brave and kind. You made me happy. But you know what? You should never be so ignorant. You could have been hurt or worse. You should be grateful for what you have. You need to be careful and respectful of other people's things."
+The sailor thanked the sailor and promised to be more responsible and respectful. He took the captain home and gave him a kiss. He left the sailor alone in the boat, wishing he had been more careful and respectful. He learned his lesson and never tried to steal again.
+-- generated 168 tokens | stopped at EOS: True
+
+[best] share of generated 16-token runs found in the training text: 2.9%
+
+=== last: step 19999, 11,015,040 params, 50.5 train tokens per param ===
+train 1.2797 | val (200 windows) 1.2881 | val (full pass) 1.2821 | perplexity 3.6 | gap 0.0084 | bits/char 0.471
+
+[last] PROMPT: Once upon a time, there was a little girl named Lily. She loved to
+Once upon a time, there was a little girl named Lily. She loved to play with her toys and eat yummy food. One day, Lily found an unusual toy in her room. It was a small, round ball.
+Lily played with the ball all day. She threw it, kicked it, and even jumped on it. The ball made her very happy. But then, something unexpected happened. The ball popped! Lily was sad because she loved the ball so much.
+Lily's mom saw her sad face and had an idea. She took the unusual toy out of the box and gave it back to Lily. Lily was so happy to have her ball back. From that day on, Lily and the unusual toy became best friends. They played together every day and shared many more fun adventures.
+-- generated 148 tokens | stopped at EOS: True
+
+[last] PROMPT: Tom and his dog went to the park. They saw a big
+Tom and his dog went to the park. They saw a big tree with a hole in it. The dog looked inside and saw a small, soft thing. It was a pill!
+Tom and his dog did not know what the pill was for. They wanted to show it to their friends. Tom said, "Look, dog! I found a pill!" But the dog did not understand. He barked and wagged his tail. Tom's mom saw that he was serious. She knew what the pill was for.
+Mom put the pill on Tom's hand. She told Tom, "Be careful, Tom. That pill is very hot." Tom felt better. He smiled at the dog and said, "Thank you, Mom." Then, they went home to tell dad about the pill.
+-- generated 150 tokens | stopped at EOS: True
+
+[last] PROMPT: The little bird was sad because
+The little bird was sad because it did not know how to get back home. It asked its friends for help. The friends were very good at helping the little bird.
+The little bird found a big tree and tried to climb it. It climbed up and started to fly. It was so happy when it reached the top. But then, something unexpected happened. The little bird fell down and landed on the soft grass. The little bird could not fly anymore.
+The friends learned that even if you are small, you can still be strong and helpful. They also learned that even when you are small or small, you can still do great things. And they all lived happily ever after.
+-- generated 134 tokens | stopped at EOS: True
+
+[last] PROMPT: One day, a boy found a red ball in the garden.
+One day, a boy found a red ball in the garden. He was very happy and wanted to play with it. He picked up the ball and started to throw it high into the sky.
+The boy saw a big bird sitting on a tree. The bird looked at the boy and said, "That is my ball! You can't play with it." The boy felt sad but he didn't give up. He kept playing with the red ball.
+Then, something unexpected happened. The big bird took the red ball and flew away. The boy was very surprised. He thought the bird would never come back. But then, the bird came back and gave the red ball back to the boy. They both laughed and became friends.
+-- generated 139 tokens | stopped at EOS: True
+
+[last] PROMPT: Mia wanted to bake a cake for her mom, but
+Mia wanted to bake a cake for her mom, but she did not know how. She looked at the stove and saw a big stove. Mia thought maybe if she put the cake in the oven, it would make the cake taste better.
+Mia put the cake in the oven and waited. The cake started to bake! Mia was so happy. But then, something unexpected happened. The cake turned into a giant cake! Mia was surprised, but she liked the giant cake. She ate the giant cake and it was so yummy. And that's how Mia made a new friend, the giant cake.
+-- generated 112 tokens | stopped at EOS: True
+
+[last] PROMPT: What is the capital of France?
+What is the capital of France? What did you do?"
+The sailor answered, "I wanted to see the captain. I thought he was special. He said he liked it very much."
+The sailor smiled and said, "That's true. You are very brave and kind. You made me happy. But you know what? You should never be so ignorant. You could have been hurt or worse. You should be grateful for what you have. You need to be careful and respectful of other people's things."
+The sailor thanked the sailor and promised to be more responsible and respectful. He took the captain home and gave him a kiss. He left the sailor alone in the boat, wishing he had been more careful and respectful. He learned his lesson and never tried to steal again.
+-- generated 168 tokens | stopped at EOS: True
+
+[last] share of generated 16-token runs found in the training text: 2.9%
