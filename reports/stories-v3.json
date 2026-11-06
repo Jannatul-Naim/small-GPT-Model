@@ -1,0 +1,37 @@
+{
+  "evaluated_at_utc": "2026-11-05T17:38:24.451899+00:00",
+  "checkpoint": "/home/naim/Projects/LLM/small-GPT-Model/checkpoints/stories-v3/gpt-best.pt",
+  "checkpoint_step": 92499,
+  "device": "cuda",
+  "seed": 2026,
+  "batches": 100,
+  "batch_size": 2,
+  "context_length": 768,
+  "validation_loss_nats_per_token": 1.1245985454320908,
+  "validation_perplexity": 3.0789805299734305,
+  "validation_binary_sha256": "ab6797e02ba73e744bf88e9fa63a8b7e4e803b8bd9d36c536c34d62715e2c955",
+  "tokenizer_sha256": "31bc36a16db79c7fc67b3bb89509effa80a15e44597a1031e578b09bdbfe3eb7",
+  "dataset_metadata": {
+    "vocab_size": 8192,
+    "sources": 4882165,
+    "new_sources": 0,
+    "train_documents": 4833164,
+    "val_documents": 49001,
+    "train_tokens": 1147643766,
+    "val_tokens": 11590840,
+    "tokenizer_sha256": "31bc36a16db79c7fc67b3bb89509effa80a15e44597a1031e578b09bdbfe3eb7",
+    "train_sha256": "f15dec1d139bc4f15e98e5760cee748ea32eb58c6debe05e839f4867e2242b47",
+    "val_sha256": "ab6797e02ba73e744bf88e9fa63a8b7e4e803b8bd9d36c536c34d62715e2c955",
+    "split_sha256": "51221ef1b3c1e4f5ec89f56ba079136c13f91324d3b03fe29a64ce4e6c3b70ce",
+    "split_strategy": "separate files",
+    "source_separator": "EOS",
+    "schema_version": 3
+  },
+  "split": {
+    "strategy": "separate files",
+    "train_file": "train.txt",
+    "train_file_sha256": "83f0f78b4496e58be56d6fa7099324062d641a0f8a8c035440ded1dcbcb4299a",
+    "validation_file": "val.txt",
+    "validation_file_sha256": "e40a0db284c5cc924af326c43df508d0220dfdb594c421272e2edc718b1f9ce8"
+  }
+}

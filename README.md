@@ -288,7 +288,8 @@ python -m training.train --mode new --steps 20000 --eval-interval 500 --data-dir
 ```
 
 Add `--model-size medium` for a 24M-parameter model, if you have hundreds of
-millions of tokens.
+millions of tokens, or `--model-size large` for a 185M-parameter model, if you
+have about a billion tokens and 10 GB of free GPU memory.
 
 Documents in the text files are separated by `<|endoftext|>`, or by whatever you
 pass as `--separator`. If the power goes, rerun the build command, or continue

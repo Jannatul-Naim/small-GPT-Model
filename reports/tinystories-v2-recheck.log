@@ -1,0 +1,45 @@
+train tokens 556,390,617 | val tokens 5,617,373 | vocab 4096 | val chars/token 3.93
+EOS in train 2,717,495 | EOS in val 27,630
+vocab never in train 85 | median token frequency 18,605
+tokens spanning 2+ words: 0
+bigram baseline val loss: 3.9821 | perplexity 53.6
+
+=== best: step 44999, 24,121,856 params, 23.1 train tokens per param ===
+train 1.0955 | val (2000 windows) 1.1115 | val (full pass) 1.1098 | perplexity 3.0 | gap 0.0161 | bits/char 0.408
+
+[best] PROMPT: Once upon a time, there was a little girl named Lily. She loved to
+Once upon a time, there was a little girl named Lily. She loved to play with her toys and make things with her hands. One day, she saw an unusual box in the room. The box was big and had many colors.
+Lily asked her mom, "Mom, what is this?" Her mom said, "That is a special box, Lily. You can open it and see what is inside." Lily was very excited and wanted to open the box right away.
+When Lily opened the box, she found many fun toys inside. She played with them all day long. At night, she put the toys back in the unusual box and went to sleep. The next morning, Lily woke up and saw all the fun toys from the box. She was so happy that she could open the box and play with them all again.
+-- generated 155 tokens | stopped at EOS: True
+
+[best] PROMPT: Tom and his dog went to the park. They saw a big
+Tom and his dog went to the park. They saw a big tree with a hole in it. Tom was curious and wanted to see what was inside the hole. He put his nose in the hole and felt something soft. He pulled it out and saw a small, shiny key.
+Tom and Spot decided to find out what the key would unlock. They walked around the park and saw many doors. They used the key to open one of the doors. Inside, they found a room full of toys and treats! Tom and Spot were so happy that they danced and played all day long.
+-- generated 109 tokens | stopped at EOS: True
+
+[best] PROMPT: The little bird was sad because
+The little bird was sad because he did not know how to fly. He tried and tried, but he just could not get up high. Then, a big wind came and blew the little bird into the air. The little bird started to soar!
+The little bird was so happy to be flying in the sky. He saw many new things from up high. He knew that he had found a special friend who helped him soar. And from that day on, the little bird and his friends played together every day, soaring high in the sky.
+-- generated 106 tokens | stopped at EOS: True
+
+[best] PROMPT: One day, a boy found a red ball in the garden.
+One day, a boy found a red ball in the garden. He was very happy and wanted to play with it. He picked up the ball and threw it high into the air. The ball went up, up, up, and then came back down. The boy laughed and clapped his hands.
+The boy played with the red ball all day. He would throw it, kick it, and catch it. Then, he would throw it again, and then run to catch it. He had so much fun playing with the red ball. At the end of the day, the boy was tired but very happy. He went inside to eat dinner with his family, and they all had a good night's sleep.
+-- generated 133 tokens | stopped at EOS: True
+
+[best] PROMPT: Mia wanted to bake a cake for her mom, but
+Mia wanted to bake a cake for her mom, but she did not know how. She asked her dad for help. Her dad said, "I will teach you how to make a cake."
+They made the cake together. Mia was so happy. But then, something unexpected happened. The cake grew and grew until it filled the whole kitchen! Mia and her dad were surprised.
+Mia's mom came into the kitchen. She saw the big mess and laughed. She said, "It's okay, Mia. We can bake another cake." Mia felt better. They all had fun baking the cake together.
+-- generated 116 tokens | stopped at EOS: True
+
+[best] PROMPT: What is the capital of France?
+What is the capital of France? You can wear it too!"
+Lily was curious. She wanted to try the capination. She put on the capbox and sat next to France. She said, "I am going to fly! I can feel like I can touch the clouds!"
+Mr. Farmer heard Lily and smiled. He said, "You are very brave, Lily. But be careful. There are some bad people who might take your capiness or break your imagination. And don't forget to say hello to them."
+Lily nodded and said, "Okay, Mr. Farmer. I will remember. Bye!" She jumped off the capasure and ran to her mom. She told her about the capination and the bad people. Her mom hugged her and said, "I'm proud of you, Lily. You are a smart girl. You have a good imagination and a good imagination."
+Lily felt happy and grateful. She liked to imagine and draw. She liked to learn new things. She liked to make her mom and dad proud. She
+-- generated 220 tokens | stopped at EOS: False
+
+[best] share of generated 16-token runs found in the training text: 8.7%

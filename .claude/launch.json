@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "small-gpt",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "web.server"],
+      "port": 8000
+    },
+    {
+      "name": "small-gpt-essays",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "web.server",
+        "--checkpoint",
+        "checkpoints/small-v2/gpt-best.pt",
+        "--data-dir",
+        "data/processed",
+        "--chunks",
+        "data/raw/chunks.jsonl"
+      ],
+      "port": 8000
+    }
+  ]
+}

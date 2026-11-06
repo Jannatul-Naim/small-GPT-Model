@@ -1,0 +1,41 @@
+Device: cuda
+GPU: NVIDIA GeForce RTX 3060
+VRAM: 11.62 GiB
+Parameters: 15,733,632
+Context: 768 | effective tokens/step: 24576
+step     99 | train 9.3346 | val 8.9496 | lr 2.00e-04
+best checkpoint saved
+step    199 | train 8.8376 | val 8.4690 | lr 2.99e-04
+best checkpoint saved
+--- power cut 2026-11-02: the log line for step 299 (val 7.5007) was lost; resumed from the step 299 checkpoint ---
+Device: cuda
+GPU: NVIDIA GeForce RTX 3060
+VRAM: 11.62 GiB
+Resuming: 300
+Parameters: 15,733,632
+Context: 768 | effective tokens/step: 24576
+step    399 | train 7.0677 | val 6.9274 | lr 2.78e-04
+best checkpoint saved
+step    499 | train 6.5396 | val 6.5437 | lr 2.58e-04
+best checkpoint saved
+step    599 | train 6.1538 | val 6.2755 | lr 2.33e-04
+best checkpoint saved
+step    699 | train 5.8587 | val 6.0813 | lr 2.04e-04
+best checkpoint saved
+step    799 | train 5.6266 | val 5.9469 | lr 1.73e-04
+best checkpoint saved
+step    899 | train 5.4446 | val 5.8457 | lr 1.42e-04
+best checkpoint saved
+step    999 | train 5.2946 | val 5.7741 | lr 1.12e-04
+best checkpoint saved
+step   1099 | train 5.1789 | val 5.7248 | lr 8.46e-05
+best checkpoint saved
+step   1199 | train 5.0902 | val 5.6895 | lr 6.18e-05
+best checkpoint saved
+step   1299 | train 5.0362 | val 5.6659 | lr 4.45e-05
+best checkpoint saved
+step   1399 | train 4.9865 | val 5.6469 | lr 3.37e-05
+best checkpoint saved
+step   1499 | train 4.9496 | val 5.6362 | lr 3.00e-05
+best checkpoint saved
+Training complete: checkpoints/small-v1/gpt.pt

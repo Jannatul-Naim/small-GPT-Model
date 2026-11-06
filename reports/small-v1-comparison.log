@@ -1,0 +1,68 @@
+train tokens 1406524 val tokens 54353 chars/token 7.18
+EOS in train 723 EOS in val 29
+bigram baseline val loss: 6.9444
+
+=== small best: step 1499, 15,733,632 params, 11.2 per train token ===
+train 4.7429 | val (200 windows) 5.6149 | val (full sweep) 5.6327 | perplexity 279.4 | gap 0.8720 | bits/char 1.132
+
+[small best] PROMPT: Children learn social behavior from adults by
+Children learn social behavior from adults by altering social expectations. Conversely, a family may feel threatened by the perceived role as a more direct identity rather than a personal conflict. A student might say, “Decurched one toy on a boy” for a slip in a different parent, who was not met and that once want to discuss its role. The resulting in ambiguous effect can be perceived as unsafe in the role of the child’s role confusion. A child who is that a child has been a role that does not feel as exhoneering, even when that people find themselves as dissolic. These early 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[small best] PROMPT: Explain the key idea in this topic:
+Explain the key idea in this topic: an event, the mind feels heard, while the feeling of not being unsettling is dangerous. This “fight‑or‑flight” response is called the “fight‑or‑flight response,” known as the brain’s prefrontal cortex. These physiological mechanisms involve re‑framing, emotional reaction, or cognitive impairment, whereas excessive fear of negative affect, chronic feelings of inadequacy. Reflective thought—for instance, is driven by an awareness of one’s own inner experiences, creating a sense of personal discloseness, or relational identity. Conversely, when the underlying motivation is being left behind, overly rigid or avoidance of chronic self‑regulation; low self‑esteem, avoidant 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[small best] PROMPT: What is the capital of France?
+What is the capital of France?” and “The EEOFOMO describes the practice of “Dinny” denotes the “place attachment”—whether the same resources become activated, such as the “Luk” for Secure attachment, a key component of personal resilience—a concept known as “family cohesion,” which emphasizes self‑monitoring and mutual self‑evaluation. When families engage in such works, they may seek help when parents experience greater resilience in the face of obstacles. Online families with clear expectations, the immediate impact of their children, or share resources into supportive environments, while families may incorporate new responsibilities and family 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[small best] PROMPT: Define the key concepts of this topic.
+Define the key concepts of this topic.
+-- generated 1 tokens | copied 16-grams 0% | stopped at EOS: True
+
+=== small last: step 1499, 15,733,632 params, 11.2 per train token ===
+train 4.7429 | val (200 windows) 5.6149 | val (full sweep) 5.6327 | perplexity 279.4 | gap 0.8720 | bits/char 1.132
+
+[small last] PROMPT: Children learn social behavior from adults by
+Children learn social behavior from adults by altering social expectations. Conversely, a family may feel threatened by the perceived role as a more direct identity rather than a personal conflict. A student might say, “Decurched one toy on a boy” for a slip in a different parent, who was not met and that once want to discuss its role. The resulting in ambiguous effect can be perceived as unsafe in the role of the child’s role confusion. A child who is that a child has been a role that does not feel as exhoneering, even when that people find themselves as dissolic. These early 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[small last] PROMPT: Explain the key idea in this topic:
+Explain the key idea in this topic: an event, the mind feels heard, while the feeling of not being unsettling is dangerous. This “fight‑or‑flight” response is called the “fight‑or‑flight response,” known as the brain’s prefrontal cortex. These physiological mechanisms involve re‑framing, emotional reaction, or cognitive impairment, whereas excessive fear of negative affect, chronic feelings of inadequacy. Reflective thought—for instance, is driven by an awareness of one’s own inner experiences, creating a sense of personal discloseness, or relational identity. Conversely, when the underlying motivation is being left behind, overly rigid or avoidance of chronic self‑regulation; low self‑esteem, avoidant 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[small last] PROMPT: What is the capital of France?
+What is the capital of France?” and “The EEOFOMO describes the practice of “Dinny” denotes the “place attachment”—whether the same resources become activated, such as the “Luk” for Secure attachment, a key component of personal resilience—a concept known as “family cohesion,” which emphasizes self‑monitoring and mutual self‑evaluation. When families engage in such works, they may seek help when parents experience greater resilience in the face of obstacles. Online families with clear expectations, the immediate impact of their children, or share resources into supportive environments, while families may incorporate new responsibilities and family 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[small last] PROMPT: Define the key concepts of this topic.
+Define the key concepts of this topic.
+-- generated 1 tokens | copied 16-grams 0% | stopped at EOS: True
+
+=== old best: step 999, 100,685,568 params, 71.6 per train token ===
+train 3.4248 | val (200 windows) 5.7172 | val (full sweep) 5.7309 | perplexity 308.2 | gap 2.2924 | bits/char 1.152
+
+[old best] PROMPT: Children learn social behavior from adults by
+Children learn social behavior from adults by adopting themselves in close friends or meet a particular game, whereas each member’s group is normal and the norms, members experience mutual trust. The development of shared family dynamics illustrates how collective identity, cultural values influence not only how individuals respond to it.
+
+There are also for understanding both the individual and the community.
+
+In practice, individuals can use local customs, celebrate diverse viewpoints, and recognize its values. Such violence help preserve a clear sense of communal responsibility; if they are pursued to assign expectations, they may experience tension between the desire for belonging while still preserving the collective identity.
+
+After this as a form of group cohesion involves recognizing that 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[old best] PROMPT: Explain the key idea in this topic:
+Explain the key idea in this topic: an employee consistently provides clear explanation, they may develop an alternative ideas, negotiate responsibilities after into personal interest.
+
+The causes of disagreement are multifaceted: children become part of the child’s social environment through early interactions at school models, which later shape career development, thereby enhancing self‑esteem, resilience, and a stronger sense of autonomy that counteracting. Contemporary support can include greater resilience in the development of chronic illnesses such as depression, anxiety, or burnout—a cascade of negative effects—including feelings of insecurity, envy, or anxiety, depressive rumination, and even depressive symptoms. In interpersonal contexts, the emotional stance of vulnerability are common. One pervasive myth is that
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[old best] PROMPT: What is the capital of France?
+What is the capital of France?d is the most explicit needs: it becomes a temporary stress for the next week, which aims to maintain basic needs while providing immediate concentrations, such as a sudden flight. The cause of this response is the presence of “stress fatigue,” which involves setting realistic goals like writing a short break, where each study sessions without sufficient exercise—creates a mental redesign that reduces the cognitive effort needed to notice it. This habit influences both effort and any cue (by paying), managing competing cues) and what truly matters, perhaps with a “no‑decision” plan that makes 
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
+
+[old best] PROMPT: Define the key concepts of this topic.
+Define the key concepts of this topic.When the most “digital life” is often used within which each household should meet them into schooling, even if the underlying rules governing law. The interplay between these two concepts has been a central pillar of individuals and societies at which human societies have produced a network of social ties and a set of economic structures across the lifespan.Mutual vote is a shared set of industries that a person uses to move through the creation of a wide range of movements and progress. A community, a global global technology—whether a particular town, a community garden in the Jample Panch in the 1960
+-- generated 100 tokens | copied 16-grams 0% | stopped at EOS: False
