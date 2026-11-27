@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 
-# Paths
 ROOT = Path(__file__).resolve().parents[1]
 
 TOPICS = ROOT / "data/topics"
@@ -35,7 +34,6 @@ def slug(s):
 
 
 def main():
-    # Parse command-line arguments
     ap = argparse.ArgumentParser()
 
     ap.add_argument(
@@ -50,20 +48,17 @@ def main():
 
     args = ap.parse_args()
 
-    # Verify that the base model and tokenizer exist
     if not CK.exists() or not VOCAB.exists():
         raise SystemExit(
             "Create a base model first: build data with dataset.engine, "
             "then train with --mode new."
         )
 
-    # Prepare the topic directory
     d = TOPICS / slug(args.topic)
     d.mkdir(parents=True, exist_ok=True)
 
     print(f"Put new permitted .txt material into: {d}")
 
-    # Rebuild the dataset using the existing tokenizer
     run(
         sys.executable,
         "-m",
@@ -74,7 +69,6 @@ def main():
         "--reuse-tokenizer",
     )
 
-    # Check whether new source versions were accepted
     new_ids = json.loads(
         (ROOT / "data/raw/new_sources.json").read_text(
             encoding="utf-8"
@@ -87,7 +81,6 @@ def main():
             "add new material before running an update."
         )
 
-    # Run the replay training update
     run(
         sys.executable,
         "-m",
@@ -98,7 +91,6 @@ def main():
         str(args.steps),
     )
 
-    # Evaluate the updated checkpoint
     report = (
         ROOT
         / "reports"

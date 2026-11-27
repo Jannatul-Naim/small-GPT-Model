@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-ROOT = Path("/home/naim/Projects/LLM/small-GPT-Model")
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from dataset.large_text import read_documents
 from model.modern_gpt import ModernGPT

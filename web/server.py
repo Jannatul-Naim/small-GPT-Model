@@ -14,7 +14,6 @@ from training import config
 from rag import Retriever
 
 
-# Paths and device configuration
 ROOT = Path(__file__).resolve().parents[1]
 
 ap = argparse.ArgumentParser()
@@ -44,7 +43,6 @@ STATIC_FILES = {"app.js", "style.css"}
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-# Load model, tokenizer, and retrieval system
 if not CKPT.exists():
     raise FileNotFoundError(CKPT)
 
@@ -75,14 +73,12 @@ del ck
 retriever = Retriever(CHUNKS)
 
 
-# Initialize FastAPI application
 app = FastAPI(
     title="Small-GPT Research Assistant",
     version="3.0",
 )
 
 
-# Request schema
 class Req(BaseModel):
     prompt: str = Field(min_length=1)
     use_retrieval: bool = True
@@ -93,7 +89,6 @@ class Req(BaseModel):
     repetition_penalty: float = Field(default=1.08, gt=0, le=2)
 
 
-# Web interface
 @app.get("/")
 def home():
     return FileResponse(WEB / "index.html")
@@ -107,7 +102,6 @@ def static_file(name: str):
     return FileResponse(WEB / name)
 
 
-# Health and model information
 @app.get("/health")
 def health():
     return {
@@ -123,7 +117,6 @@ def health():
     }
 
 
-# Retrieval search endpoint
 @app.post("/search")
 def search(r: Req):
     retriever.refresh()
@@ -133,7 +126,6 @@ def search(r: Req):
     }
 
 
-# Streaming text generation endpoint
 @app.post("/stream")
 def stream(r: Req):
     retriever.refresh()
@@ -154,7 +146,6 @@ def stream(r: Req):
         for i, h in enumerate(hits)
     )
 
-    # Construct the prompt with retrieved source material.
     prompt = (
         (
             "Use the retrieved source material when relevant. "
@@ -180,7 +171,6 @@ def stream(r: Req):
         cur = idx
 
         for step in range(r.max_new_tokens):
-            # Run the model on the available context.
             context = cur[:, -model_config["block_size"]:]
 
             with torch.no_grad():
@@ -196,7 +186,6 @@ def stream(r: Req):
                 1e-5,
             )
 
-            # Penalize tokens already present in the context.
             seen = torch.unique(context)
             value = logits[:, seen]
             logits[:, seen] = torch.where(
@@ -208,7 +197,6 @@ def stream(r: Req):
             if step < config.min_new_tokens:
                 logits[:, tok.EOS] = float("-inf")
 
-            # Top-k sampling
             if r.top_k:
                 v, _ = torch.topk(
                     logits,
@@ -217,7 +205,6 @@ def stream(r: Req):
 
                 logits[logits < v[:, -1:]] = float("-inf")
 
-            # Top-p (nucleus) sampling
             if 0 < r.top_p < 1:
                 sl, si = torch.sort(
                     logits,
@@ -240,7 +227,6 @@ def stream(r: Req):
 
                 logits.scatter_(1, si, sl)
 
-            # Sample the next token
             nxt = torch.multinomial(
                 torch.softmax(logits, dim=-1),
                 1,

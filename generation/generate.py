@@ -9,7 +9,6 @@ from tokenizer.bpe import BPETokenizer
 from training import config
 
 
-# Paths
 ROOT = Path(__file__).resolve().parents[1]
 
 CKPT = ROOT / config.best_checkpoint_path
@@ -17,7 +16,6 @@ VOCAB = ROOT / "data/processed/vocab.json"
 
 
 def main():
-    # Parse command-line arguments
     ap = argparse.ArgumentParser()
 
     ap.add_argument(
@@ -68,7 +66,6 @@ def main():
 
     a = ap.parse_args()
 
-    # Select device and load checkpoint
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     ck = torch.load(
@@ -77,14 +74,12 @@ def main():
         weights_only=False,
     )
 
-    # Load tokenizer and initialize model
     tok = BPETokenizer.load(a.data_dir / VOCAB.name)
 
     model = ModernGPT(**ck["config"]).to(device)
     model.load_state_dict(ck["model_state"])
     model.eval()
 
-    # Encode prompt and prepare model input
     ids = tok.encode(a.prompt)
 
     idx = torch.tensor(
@@ -93,7 +88,6 @@ def main():
         device=device,
     )
 
-    # Generate and decode text
     out = model.generate(
         idx,
         a.max_new_tokens,

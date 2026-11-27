@@ -45,12 +45,10 @@ class RMSNorm(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Learnable scaling parameter applied after normalization.
         self.weight = nn.Parameter(
             torch.ones(dim)
         )
 
-        # Prevent division by zero when computing the inverse RMS.
         self.eps = eps
 
     def forward(
@@ -65,8 +63,6 @@ class RMSNorm(nn.Module):
         Returns:
             RMS-normalized tensor with the same shape as ``x``.
         """
-        # Compute mean squared activation magnitude.
-        #
         # Float32 is used for this calculation to improve numerical
         # stability when the model itself is running in lower precision.
         variance = (
@@ -78,12 +74,10 @@ class RMSNorm(nn.Module):
             )
         )
 
-        # Scale each hidden state by the inverse root mean square.
         x = x * torch.rsqrt(
             variance + self.eps
         )
 
-        # Apply the learned RMSNorm scaling parameter.
         return self.weight * x
 
 
@@ -139,10 +133,6 @@ def apply_rope(
     head_dim = q.shape[-1]
     device = q.device
 
-    # Calculate the inverse frequencies used by the rotary embedding.
-    #
-    # Frequencies are distributed across the dimensions of each attention
-    # head, allowing different dimensions to rotate at different rates.
     inv_freq = 1.0 / (
         10000 ** (
             torch.arange(
@@ -156,27 +146,22 @@ def apply_rope(
         )
     )
 
-    # Generate a position index for every token in the sequence.
     positions = torch.arange(
         seq_len,
         device=device,
         dtype=torch.float32,
     )
 
-    # Combine token positions and frequencies to obtain rotation angles.
     freqs = torch.outer(
         positions,
         inv_freq,
     )
 
-    # Duplicate the frequency representation so that it matches the
-    # complete attention-head dimension.
     emb = torch.cat(
         [freqs, freqs],
         dim=-1,
     )
 
-    # Add batch and head dimensions for broadcasting over q and k.
     cos = emb.cos()[
         None,
         None,
@@ -191,7 +176,6 @@ def apply_rope(
         :
     ]
 
-    # Apply the rotary transformation to both queries and keys.
     return (
         q * cos + rotate_half(q) * sin,
         k * cos + rotate_half(k) * sin,
@@ -221,22 +205,18 @@ class SwiGLU(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Gating projection. SiLU is applied to this branch before it is
-        # multiplied with the up-projection.
         self.gate = nn.Linear(
             dim,
             hidden_dim,
             bias=False,
         )
 
-        # Second projection providing the values controlled by the gate.
         self.up = nn.Linear(
             dim,
             hidden_dim,
             bias=False,
         )
 
-        # Project the expanded representation back to the model dimension.
         self.down = nn.Linear(
             hidden_dim,
             dim,
@@ -259,12 +239,6 @@ class SwiGLU(nn.Module):
         Returns:
             Transformed hidden states with the original model dimension.
         """
-        # SwiGLU:
-        #
-        #   SiLU(gate(x)) * up(x)
-        #
-        # The multiplicative gate allows the network to control which
-        # intermediate features are passed through the FFN.
         x = (
             F.silu(
                 self.gate(x)
@@ -272,7 +246,6 @@ class SwiGLU(nn.Module):
             * self.up(x)
         )
 
-        # Project back to the model dimension and apply dropout.
         return self.dropout(
             self.down(x)
         )
@@ -310,20 +283,16 @@ class GQAAttention(nn.Module):
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads
 
-        # Determine the dimensionality of each attention head.
         self.head_dim = dim // n_heads
 
-        # Number of query heads assigned to each key/value head.
         self.repeat = n_heads // n_kv_heads
 
-        # Query projection produces one representation for every query head.
         self.q_proj = nn.Linear(
             dim,
             n_heads * self.head_dim,
             bias=False,
         )
 
-        # Key and value projections use fewer heads because of GQA.
         self.k_proj = nn.Linear(
             dim,
             n_kv_heads * self.head_dim,
@@ -336,7 +305,6 @@ class GQAAttention(nn.Module):
             bias=False,
         )
 
-        # Final projection combines all attention-head outputs.
         self.o_proj = nn.Linear(
             dim,
             dim,
@@ -360,10 +328,6 @@ class GQAAttention(nn.Module):
         """
         B, T, C = x.shape
 
-        # Project hidden states into query representations and rearrange
-        # them into:
-        #
-        # [batch, heads, sequence, head_dimension]
         q = self.q_proj(x).view(
             B,
             T,
@@ -371,8 +335,6 @@ class GQAAttention(nn.Module):
             self.head_dim,
         ).transpose(1, 2)
 
-        # Key and value projections use fewer heads than queries because
-        # this module implements Grouped-Query Attention.
         k = self.k_proj(x).view(
             B,
             T,
@@ -387,11 +349,8 @@ class GQAAttention(nn.Module):
             self.head_dim,
         ).transpose(1, 2)
 
-        # Inject positional information into queries and keys using RoPE.
         q, k = apply_rope(q, k)
 
-        # Repeat each key/value head so that the number of key/value heads
-        # matches the number of query heads.
         k = k.repeat_interleave(
             self.repeat,
             dim=1,
@@ -402,10 +361,6 @@ class GQAAttention(nn.Module):
             dim=1,
         )
 
-        # PyTorch's scaled dot-product attention provides an optimized
-        # implementation when supported by the current hardware and
-        # PyTorch version.
-        #
         # is_causal=True prevents each token from attending to future tokens,
         # which is required for autoregressive language modeling.
         output = F.scaled_dot_product_attention(
@@ -420,11 +375,6 @@ class GQAAttention(nn.Module):
             is_causal=True,
         )
 
-        # Restore the standard Transformer shape:
-        #
-        # [batch, heads, sequence, head_dim]
-        #             ↓
-        # [batch, sequence, model_dimension]
         output = (
             output
             .transpose(1, 2)
@@ -490,8 +440,6 @@ class TransformerBlock(nn.Module):
         Returns:
             Hidden states after one Transformer block.
         """
-        # Pre-normalization followed by causal self-attention and a
-        # residual connection.
         x = (
             x
             + self.attention(
@@ -499,8 +447,6 @@ class TransformerBlock(nn.Module):
             )
         )
 
-        # Pre-normalization followed by the SwiGLU feed-forward network
-        # and a second residual connection.
         x = (
             x
             + self.ffn(
@@ -561,16 +507,13 @@ class ModernGPT(nn.Module):
     ) -> None:
         super().__init__()
 
-        # Maximum sequence length supported by this model instance.
         self.block_size = block_size
 
-        # Convert input token IDs into dense vector representations.
         self.embedding = nn.Embedding(
             vocab_size,
             dim,
         )
 
-        # Stack the requested number of decoder Transformer blocks.
         self.blocks = nn.ModuleList(
             [
                 TransformerBlock(
@@ -584,10 +527,8 @@ class ModernGPT(nn.Module):
             ]
         )
 
-        # Final normalization before vocabulary prediction.
         self.norm = RMSNorm(dim)
 
-        # Project hidden states into vocabulary logits.
         self.lm_head = nn.Linear(
             dim,
             vocab_size,
@@ -596,15 +537,10 @@ class ModernGPT(nn.Module):
 
         # Weight tying shares the token embedding matrix with the language
         # model output projection.
-        #
-        # This reduces the total number of parameters and is a common
-        # technique in language-model architectures.
         self.lm_head.weight = (
             self.embedding.weight
         )
 
-        # Initialize model parameters after constructing the complete
-        # architecture.
         self.apply(
             self._init_weights
         )
@@ -663,17 +599,13 @@ class ModernGPT(nn.Module):
         """
         B, T = idx.shape
 
-        # Prevent sequences longer than the architecture's supported
-        # context length from entering the model.
         if T > self.block_size:
             raise ValueError(
                 "Sequence exceeds context length."
             )
 
-        # Convert token IDs into dense hidden representations.
         x = self.embedding(idx)
 
-        # Pass the sequence through every Transformer block.
         # Activation checkpointing recomputes a block during backward instead
         # of keeping all intermediate activations in GPU memory.
         use_ckpt = (
@@ -691,17 +623,13 @@ class ModernGPT(nn.Module):
             else:
                 x = block(x)
 
-        # Normalize the final hidden representation.
         x = self.norm(x)
 
-        # Convert hidden states into logits over the complete vocabulary.
         logits = self.lm_head(x)
 
         loss = None
 
         if targets is not None:
-            # Flatten both logits and target IDs so that cross_entropy can
-            # calculate next-token prediction loss across every position.
             loss = F.cross_entropy(
                 logits.reshape(
                     -1,
@@ -753,8 +681,6 @@ class ModernGPT(nn.Module):
             Token IDs containing the original prompt followed by the
             generated tokens.
         """
-        # Generation does not require gradients, reducing memory usage and
-        # computation overhead during inference.
         self.eval()
 
         for step in range(max_new_tokens):
@@ -766,7 +692,6 @@ class ModernGPT(nn.Module):
                 -self.block_size:
             ]
 
-            # Predict vocabulary logits for the current context.
             logits, _ = self(idx_cond)
 
             # Only the final position is needed because it predicts the
@@ -780,7 +705,6 @@ class ModernGPT(nn.Module):
             if eos_id is not None and step < min_new_tokens:
                 logits[:, eos_id] = float("-inf")
 
-            # Penalize tokens already present in the current context.
             if repetition_penalty != 1.0:
                 seen = torch.unique(idx_cond)
                 for token_id in seen.tolist():
@@ -820,13 +744,11 @@ class ModernGPT(nn.Module):
 
             probs = F.softmax(logits, dim=-1)
 
-            # Sample one token from the resulting probability distribution.
             next_token = torch.multinomial(
                 probs,
                 1,
             )
 
-            # Append the sampled token to the generated sequence.
             idx = torch.cat(
                 [idx, next_token],
                 dim=1,

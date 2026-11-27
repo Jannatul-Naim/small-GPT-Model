@@ -472,7 +472,6 @@ class BPETokenizer:
                 f"Merges: {len(self.merges)}"
             )
 
-        # Release large training structures
         del counts
         del positions
         del heap
@@ -679,20 +678,10 @@ class BPETokenizer:
         self,
         chunk: str,
     ) -> list[int]:
-        """
-        Encode one chunk using byte-level BPE.
+        """Encode one chunk, applying the lowest-rank merge on each pass.
 
-        This version intentionally does NOT maintain a heap of
-        candidate merges.
-
-        The previous implementation could accumulate many heap
-        entries during encoding. Stale entries remained in the
-        heap and could consume a very large amount of RAM.
-
-        This implementation scans the active token sequence and
-        selects the highest-priority BPE merge each iteration.
-
-        It uses more CPU but dramatically reduces memory usage.
+        Rescanning instead of keeping a heap of candidate merges costs more
+        CPU but keeps memory flat on long chunks.
         """
 
         data = chunk.encode("utf-8")
