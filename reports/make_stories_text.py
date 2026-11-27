@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
-ROOT = Path("/home/naim/Projects/LLM/small-GPT-Model")
+ROOT = Path(__file__).resolve().parents[1]
 TINY = ROOT / "data/tinystories/raw"
 SIMPLE = ROOT / "data/simplestories/raw"
 OUT = ROOT / "data/stories-v3/raw"
