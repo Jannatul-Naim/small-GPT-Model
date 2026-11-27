@@ -28,7 +28,6 @@ from pypdf import PdfReader
 from tokenizer.bpe import BPETokenizer
 
 
-# Paths and configuration
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = ROOT / 'data' / 'ingest'
 RAW = ROOT / 'data' / 'raw'
@@ -48,7 +47,6 @@ DEFAULT_CHARS = 1800
 DEFAULT_OVERLAP = 250
 TEMP_PREFIX = '._tmp_'
 
-# Writes that a power cut cannot leave half finished
 @contextmanager
 def atomic_open(path: Path, mode: str = 'w') -> Iterator[IO]:
     """Write to a temp file, then rename it over path once it is safely on disk."""
@@ -86,7 +84,6 @@ def file_sha(path: Path) -> str:
     return h.hexdigest()
 
 
-# Text normalization and validation
 def sha256(text: str) -> str:
     return hashlib.sha256(text.encode('utf-8', errors='ignore')).hexdigest()
 
@@ -112,7 +109,6 @@ def quality(text: str, min_chars: int) -> tuple[bool, str]:
         return (False, 'low-alpha-ratio')
     return (True, 'ok')
 
-# Local and web source extraction
 def extract_pdf(path: Path) -> str:
     reader = PdfReader(str(path))
     pages: list[str] = []
@@ -158,7 +154,6 @@ def scrape(url: str, timeout: int=30) -> str:
         return '\n\n'.join(pages)
     return extract_html_text(response.text)
 
-# Source manifest and retrieval chunks
 def canonical_file_id(path: Path, root: Path) -> str:
     rel = path.resolve().relative_to(root.resolve()).as_posix()
     return f'file:{rel}'
@@ -241,7 +236,6 @@ def build_chunks(rows: list[dict], chars: int, overlap: int) -> int:
                 count += 1
     return count
 
-# Tokenizer and training binary generation
 def load_or_train_tokenizer(corpus: str, vocab_size: int) -> BPETokenizer:
     """Keep the trained tokenizer in the cache so a rerun can skip training."""
     key = sha256(f'{vocab_size}\n{corpus}')
@@ -393,7 +387,6 @@ def write_training_binaries(
     atomic_write_text(META, json.dumps(meta, indent=2))
     return meta
 
-# Pipeline entry point
 def main() -> None:
     ap = argparse.ArgumentParser(
         description='Build Small-GPT training data from PDF/TXT/HTML and optional URLs.'

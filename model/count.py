@@ -63,24 +63,17 @@ def main() -> None:
         },
     }
 
-    # Evaluate each configuration independently so that only one model
-    # needs to remain in memory at a time.
     for name, config in configs.items():
-        # Instantiate the model using the exact architecture configuration.
         model = ModernGPT(**config)
 
-        # Calculate the model's total parameter count.
         parameters = count_parameters(model)
 
-        # Display both the approximate parameter count in billions and
-        # the exact number of parameters.
         print(
             f"{name:8} "
             f"{parameters / 1e9:.3f}B parameters "
             f"({parameters:,})"
         )
 
-        # Release the current model before processing the next configuration.
         del model
 
 

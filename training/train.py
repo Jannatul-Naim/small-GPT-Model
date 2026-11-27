@@ -19,7 +19,6 @@ from tokenizer.bpe import BPETokenizer
 from training import config
 
 
-# Paths
 ROOT = Path(__file__).resolve().parents[1]
 
 DATA = ROOT / "data/processed"
@@ -250,7 +249,6 @@ def restore_rng(state):
 
 
 def main():
-    # Parse training mode and step count
     ap = argparse.ArgumentParser()
 
     ap.add_argument(
@@ -307,7 +305,6 @@ def main():
                 "--checkpoint-dir for a separate run, or --overwrite."
             )
 
-    # Initialize random seeds and select the device
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
 
@@ -325,7 +322,6 @@ def main():
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
-    # Verify the prepared dataset
     if (
         not (data_dir / "train.bin").exists()
         or not (data_dir / "val.bin").exists()
@@ -342,7 +338,6 @@ def main():
     cfg = dict(config.CONFIGS[args.model_size])
     cfg["vocab_size"] = tok.vocab_size
 
-    # Initialize a new training run
     if args.mode == "new":
         model = ModernGPT(**cfg).to(device)
         opt = make_optimizer(model, config.learning_rate)
@@ -356,7 +351,6 @@ def main():
         }
         steps = run["total_steps"]
 
-    # Resume a previous training run
     elif args.mode == "resume":
         ck = torch.load(
             ckpt_path,
@@ -406,7 +400,6 @@ def main():
 
         print("Resuming:", start)
 
-    # Continue training the best checkpoint with new data and replay data
     else:
         meta = json.loads((data_dir / "meta.json").read_text(encoding="utf-8"))
 
@@ -461,7 +454,6 @@ def main():
     else:
         train = load_bin(data_dir, "train.bin")
 
-    # Configure the model and training loop
     model.gradient_checkpointing = config.gradient_checkpointing
 
     print(
@@ -488,7 +480,6 @@ def main():
     train_loss = 0.0
     train_steps = 0
 
-    # Training loop
     for step in range(start, start + steps):
         current_lr = lr(step, run["total_steps"], run["peak_lr"])
 
@@ -535,7 +526,6 @@ def main():
 
         opt.zero_grad(set_to_none=True)
 
-        # Periodically evaluate and save checkpoints
         if (
             (step + 1) % args.eval_interval == 0
             or step == start + steps - 1
@@ -569,7 +559,6 @@ def main():
                 ckpt_path,
             )
 
-    # Save the final checkpoint
     final = start + steps - 1
 
     atomic(

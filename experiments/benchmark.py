@@ -6,14 +6,12 @@ import math
 from pathlib import Path
 
 
-# Paths
 ROOT = Path(__file__).resolve().parents[1]
 
 meta = ROOT / "data/processed/meta.json"
 ck = ROOT / "checkpoints/gpt.pt"
 
 
-# Dataset metadata
 print("=== Small-GPT v3 benchmark metadata ===")
 
 if meta.exists():
@@ -22,7 +20,6 @@ else:
     print("No prepared dataset")
 
 
-# Checkpoint metadata and approximate perplexity
 if ck.exists():
     import torch
 

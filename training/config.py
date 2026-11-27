@@ -2,8 +2,9 @@
 
 MODEL_SIZE = "small"
 
+# vocab_size is replaced by the tokenizer's size when training starts.
 CONFIGS = {
-    # About 16M parameters, or 11 per token of the 1.4M-token training set.
+    # v1: 11M parameters with a 4,096-token vocabulary.
     "small": {
         "vocab_size": 16384,
         "block_size": 768,
@@ -14,8 +15,7 @@ CONFIGS = {
         "ffn_dim": 1024,
         "dropout": 0.1,
     },
-    # About 24M parameters with a 4096-token vocabulary. Made for TinyStories
-    # (556M tokens); it would memorize a small corpus. Select it with
+    # v2: 24M parameters with a 4,096-token vocabulary. Select it with
     # --model-size medium.
     "medium": {
         "vocab_size": 16384,
@@ -27,9 +27,8 @@ CONFIGS = {
         "ffn_dim": 1365,
         "dropout": 0.1,
     },
-    # About 185M parameters with an 8192-token vocabulary, using about 9.6 GiB
-    # of GPU memory in training. Made for a billion tokens of stories. Select
-    # it with --model-size large.
+    # v3: 185M parameters with an 8,192-token vocabulary, using about 9.6 GiB
+    # of GPU memory in training. Select it with --model-size large.
     "large": {
         "vocab_size": 16384,
         "block_size": 768,
